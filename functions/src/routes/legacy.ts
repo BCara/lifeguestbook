@@ -6,11 +6,13 @@ import { hostingAfterPurchase, isPaid } from "../../../src/shared/plans";
 import { DEFAULT_CHAPTERS } from "../../../src/shared/types";
 import { requireUser, type AppEnv } from "../auth";
 import { AiRefusal, DRAFT_KINDS, draftWriting, interviewQuestions, type DraftKind, type Tone } from "../ai";
-import { adminEmails, contributions, getMemorial, logAudit, memorials, roleOf, users, type ContributionDoc, type MemorialDoc, type UserDoc } from "../db";
-import { conversionEmail, sendEmail } from "../email";
+import { adminEmails, contributions, diedMD, getMemorial, logAudit, memorials, roleOf, users, type ContributionDoc, type MemorialDoc, type UserDoc } from "../db";
+import { conversionEmail, recoveryEmail, sendEmail } from "../email";
 import { overLimit } from "../limits";
 
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : undefined);
+export const RECOVERY_IDLE_MS = 90 * 24 * 3600_000;
+export const RECOVERY_WAIT_DAYS = 14;
 export const chapters = (mid: string) => memorials().doc(mid).collection("chapters");
 export const drafts = (mid: string) => memorials().doc(mid).collection("drafts");
 
@@ -33,7 +35,8 @@ async function countAiUse(mid: string) {
 }
 
 export const legacyRoutes = new Hono<AppEnv>()
-  .use("*", requireUser)
+  .use("/memorials", requireUser)
+  .use("/memorials/*", requireUser)
 
   // ------------------------------------------------------------------ chapters
   .get("/memorials/:id/chapters", async (c) => {
@@ -160,6 +163,32 @@ export const legacyRoutes = new Hono<AppEnv>()
     await logAudit(id, uid, "legacy_contact", b.uid ?? undefined);
     return c.json({ ok: true });
   })
+  // If the owner has gone quiet (90 days), an admin can ask to take over. The owner gets 14 days of
+  // emails to say no; signing in at all also cancels it. The daily job completes it otherwise.
+  .post("/memorials/:id/recovery", async (c) => {
+    const id = c.req.param("id");
+    const uid = c.get("uid")!;
+    if ((await roleOf(id, uid)) !== "admin") return c.json({ error: "Only admins can ask to take over the page." }, 403);
+    const m = (await getMemorial(id))!;
+    if (m.recovery) return c.json({ error: "A request is already waiting." }, 400);
+    const owner = (await users().doc(m.ownerId).get()).data() as UserDoc | undefined;
+    const idle = owner ? Date.now() - (owner.lastSeenAt ?? owner.createdAt) : Infinity;
+    if (idle < RECOVERY_IDLE_MS) return c.json({ error: "The owner has been active recently. Ask them to make you the owner instead." }, 400);
+    await memorials().doc(id).update({ recovery: { requestedBy: uid, at: Date.now() } });
+    const requester = ((await users().doc(uid).get()).data() as UserDoc).email;
+    if (owner) await sendEmail(c.env, recoveryEmail(owner.email, m.name, requester, `${c.env.APP_ORIGIN}/dashboard/${id}?tab=people`));
+    await logAudit(id, uid, "recovery_requested");
+    return c.json({ ok: true, completesAfterDays: RECOVERY_WAIT_DAYS });
+  })
+  .post("/memorials/:id/recovery/cancel", async (c) => {
+    const id = c.req.param("id");
+    const uid = c.get("uid")!;
+    const m = (await getMemorial(id))!;
+    if (!m.recovery || (m.ownerId !== uid && m.recovery.requestedBy !== uid)) return c.json({ error: "Nothing to cancel." }, 400);
+    await memorials().doc(id).update({ recovery: null });
+    await logAudit(id, uid, "recovery_cancelled");
+    return c.json({ ok: true });
+  })
   .post("/memorials/:id/convert", async (c) => {
     const id = c.req.param("id");
     const uid = c.get("uid")!;
@@ -170,7 +199,7 @@ export const legacyRoutes = new Hono<AppEnv>()
     const b = (await c.req.json().catch(() => ({}))) as { died?: string; service?: Record<string, unknown>; intro?: string };
     const died = str(b.died, 10);
     if (!died) return c.json({ error: "Please add the date they passed away." }, 400);
-    const update: Record<string, unknown> = { mode: "memorial", died, convertedAt: Date.now(), convertedBy: uid };
+    const update: Record<string, unknown> = { mode: "memorial", died, diedMD: diedMD(died), convertedAt: Date.now(), convertedBy: uid };
     if (b.service) update.service = JSON.parse(JSON.stringify({ date: str(b.service.date, 10), time: str(b.service.time, 20), place: str(b.service.place, 200) }));
     if (str(b.intro, 600)) update.intro = str(b.intro, 600);
     // A Living Legacy subscription becomes a Tribute with 2 years from today; nothing extra to pay.

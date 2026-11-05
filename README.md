@@ -4,7 +4,7 @@ lifeguestbook.com: one shared, permanent place for a person's life story. Family
 
 The product plan, competitor research and pricing are in [PLAN.md](PLAN.md).
 
-## What's built (MVP)
+## What's built
 
 - **Memorial and Living Legacy pages** (`/m/:slug`): cover photo, dates, life story, service details and livestream link, plus a gallery of memories filtered by photos, words or era. Link-only by default.
 - **Add a memory** (`/m/:slug/add`): no account or app. Photos, video and voice (video and voice on paid pages), text, name, how they knew them, the era, and an optional email for "it's on the page now". QR scans are tagged as "at the service".
@@ -14,7 +14,14 @@ The product plan, competitor research and pricing are in [PLAN.md](PLAN.md).
 - **Share kit**: links, a ready-to-post message, WhatsApp, Facebook, email and native share.
 - **Email (Resend)**: sign-in links, invites, page ready, **digests** through a notification outbox (hourly; every 5 minutes in "instant" mode or when something is reported), "your memory was approved", ownership transfer, receipts, renewal reminders at 30 days, 7 days and lapsed, day-before checklist and day-after recap. Unsubscribe links are signed.
 - **Payments (Stripe Checkout)**: Tribute and Forever (one-off), yearly hosting and Living Legacy (subscriptions), in GBP, AUD, USD, NZD, EUR and CAD by time zone. Tribute includes 2 years. Lapsed pages **freeze, never delete**. Any admin can pay.
-- **Download everything**: a ZIP of all approved media plus a text file of all the memories.
+- **Download everything**: a ZIP of all approved media plus a text file of all the memories, and a **printable memory book** (A5 or A4; cover, life story, chapters, every memory, "with love from") that saves as a PDF for a print shop.
+- **Writing help (Claude)**: drafts a life story, eulogy, obituary or thank-you message from the approved memories plus the family's own notes. It is told never to invent facts and to leave `[placeholders]` instead. Guest text is passed as quoted data, never as instructions. "Use as the life story" puts it on the page, and drafts are kept. Free pages get 3 uses; paid pages get 40 a day.
+- **Living Legacy**: chapters of a life (reorderable), Claude-suggested interview questions per chapter that build on what's already been told, answers as text, photos, or **voice and video recorded in the browser**, and **sealed letters** that open on a date or when the page becomes a memorial (family only, never public). A **legacy contact** turns the page into a memorial; the Living Legacy plan becomes a Tribute with 2 years included. The public page shows a timeline of chapters.
+- **Big videos**: files over 25 MB upload in 8 MB chunks, each retried on bad signal, then combined in Cloud Storage (up to 200 MB). Guests can record voice and video messages on paid pages.
+- **Link previews**: `/m/**` is served by a small `share` function that adds Open Graph tags (name, years, intro) and a 1200×630 share image built from the cover photo. Links pasted into Facebook, WhatsApp or iMessage show the person, not a generic card. Private pages show nothing.
+- **Succession**: if the owner hasn't signed in for 90 days, an admin can ask to take over. The owner is emailed, has 14 days to say no, and signing in at all cancels it.
+- **Anniversary emails** to admins each year on the date they died, inviting more memories.
+- **FAQ, privacy and terms pages.** The privacy and terms text is a draft for legal review before launch.
 
 ## Architecture
 
@@ -31,6 +38,9 @@ Same stack as LazyAlbum and DigiStayBook: Firebase Hosting, Cloud Functions (2nd
 | Emails and outbox digests | `functions/src/email.ts`, `functions/src/notify.ts` |
 | Daily jobs (renewals, day-before, recap) | `functions/src/jobs.ts` |
 | Stripe | `functions/src/payments.ts` |
+| Writing help and interview questions (Claude Opus 5.5, server-side refusal fallback) | `functions/src/ai.ts`, `functions/src/routes/legacy.ts` |
+| Chunked uploads | `functions/src/routes/uploads.ts` |
+| Link previews | `functions/src/share.ts` |
 
 Firestore and Storage rules deny all browser access. Every read and write goes through the API, which checks the caller's role on that memorial.
 
@@ -46,7 +56,7 @@ npm install --legacy-peer-deps
 npm run dev
 ```
 
-Open http://localhost:5173. Sign-in links, invitation links and every email show on screen or in the functions log; nothing is really sent. Without Stripe keys, upgrades apply instantly at no charge. Type `[review]` or `[safety]` in a memory to simulate screening flags. `POST /api/dev/run-jobs` runs the digest and daily jobs immediately.
+Open http://localhost:5173 (Vite proxies `/api` straight to the Functions emulator). Sign-in links, invitation links and every email show on screen or in the functions log; nothing is really sent. Without Stripe keys, upgrades apply instantly at no charge. Type `[review]` or `[safety]` in a memory to simulate screening flags. `POST /api/dev/run-jobs` runs the digest and daily jobs immediately.
 
 Checks:
 
@@ -85,7 +95,15 @@ npm run test:smoke
    ```
 
    To keep a feature off, set its secret to `none`.
-5. Deploy:
+5. **Claude (writing help)**: create a key in a workspace at platform.claude.com, then run:
+
+   ```bash
+   npx firebase functions:secrets:set ANTHROPIC_API_KEY
+   ```
+
+   Without it, writing help returns clearly-marked sample text. Requests use `claude-opus-5-5` with the server-side refusal fallback (`fallbacks: "default"`).
+6. Optionally add a Firestore TTL policy on `limits.expiresAt` and `uploads.expiresAt` (the daily job also cleans these up).
+7. Deploy:
 
    ```bash
    npm run deploy
@@ -93,4 +111,7 @@ npm run test:smoke
 
 ## Next up
 
-See PLAN.md §5. Highest value next: resumable direct-to-Storage uploads for videos over 30 MB, OG share images per memorial, Living Legacy chapters and timeline, inactive-owner recovery, Sentry and GA4, help chat, and legal pages.
+- Sentry and GA4 wiring (same pattern as LazyAlbum), and the help chat bubble.
+- A funeral-director partner portal (bulk credits, co-branded QR cards).
+- A print-on-demand memory book integration (the printable PDF works today).
+- Legal review of the privacy and terms drafts for the UK, Australia and the US.

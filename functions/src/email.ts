@@ -160,6 +160,34 @@ export function conversionEmail(to: string, memorialName: string, actor: string,
   };
 }
 
+export function recoveryEmail(to: string, memorialName: string, requester: string, link: string): Email {
+  return {
+    to,
+    subject: `${requester} has asked to look after ${memorialName}'s page`,
+    html: layout("Are you still looking after this page?",
+      p(`${esc(requester)}, an admin of ${esc(memorialName)}'s page, has asked to become its owner because you haven't signed in for a while.`) +
+      p("<strong>If that's fine, you don't need to do anything.</strong> Ownership moves to them in 14 days and you'll stay on as an admin. If you'd rather keep it, sign in and cancel the request; signing in at all cancels it too."),
+      { label: "Keep ownership", url: link }),
+    text: `${requester} asked to take over ${memorialName}'s page. It moves in 14 days unless you sign in: ${link}`,
+  };
+}
+
+export function anniversaryEmail(to: string, memorialName: string, years: number, pageUrl: string, unsubscribeUrl: string): Email {
+  const first = memorialName.split(" ")[0];
+  const when = years === 1 ? "a year" : `${years} years`;
+  return {
+    to,
+    subject: `Remembering ${first}, ${when} on`,
+    html: layout(`Remembering ${first}`,
+      p(`It's ${when} today since ${esc(memorialName)} passed away. We hope the memories people shared bring some comfort.`) +
+      p("Today can be a good day to invite more: people often find a photo or remember a story they didn't think of at the time."),
+      { label: `Visit ${first}'s page`, url: pageUrl },
+      `You're an admin of this page. <a href="${esc(unsubscribeUrl)}">Stop these emails</a>.`),
+    text: `It's ${when} today since ${memorialName} passed away. ${pageUrl}`,
+    unsubscribeUrl,
+  };
+}
+
 export function dayBeforeEmail(to: string, memorialName: string, wallUrl: string, dashboardUrl: string): Email {
   return {
     to,

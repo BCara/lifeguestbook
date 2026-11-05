@@ -4,11 +4,14 @@
 import assert from "node:assert/strict";
 import { deflateSync } from "node:zlib";
 
+const RUN = Date.now().toString(36); // unique accounts per run, so reruns against saved emulator data work
+const OWNER = `owner-${RUN}@example.test`, SISTER = `sister-${RUN}@example.test`;
 const BASE = process.env.SMOKE_BASE ?? "http://127.0.0.1:5001/demo-lifeguestbook/us-central1/api";
 class Client {
   cookie = "";
+  ip = `10.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`;
   async req(method, path, body, form) {
-    const headers = { cookie: this.cookie };
+    const headers = { cookie: this.cookie, "x-forwarded-for": this.ip };
     let payload;
     if (form) payload = form;
     else if (body !== undefined) { headers["content-type"] = "application/json"; payload = JSON.stringify(body); }
@@ -44,10 +47,10 @@ const sister = new Client();
 const guest = new Client();
 const step = (s) => console.log(`✓ ${s}`);
 
-await owner.signIn("owner@example.test");
+await owner.signIn(OWNER);
 step("owner signs in with an email link");
 
-let r = await owner.req("POST", "/memorials", { name: "Margaret Hughes", born: "1948-03-02", died: "2026-10-30", intro: "Mum loved her garden.", service: { date: "2026-11-12", place: "St Mary's, Bury" }, coAdmins: ["sister@example.test"] });
+let r = await owner.req("POST", "/memorials", { name: "Margaret Hughes", born: "1948-03-02", died: "2026-10-30", intro: "Mum loved her garden.", service: { date: "2026-11-12", place: "St Mary's, Bury" }, coAdmins: [SISTER] });
 assert.equal(r.status, 200, JSON.stringify(r.data));
 const { id, slug } = r.data;
 step(`memorial created (${slug}) with a co-admin invite`);
@@ -60,10 +63,10 @@ step("defaults: link-only, approve-first, free plan");
 
 // The invite email was sent; accept it as the sister.
 r = await owner.req("GET", "/dev/emails");
-const inviteMail = r.data.emails.find((e) => e.to === "sister@example.test");
+const inviteMail = r.data.emails.find((e) => e.to === SISTER);
 assert.ok(inviteMail, "invite email logged");
 const inviteToken = inviteMail.text.match(/invite\?t=([\w-]+)/)[1];
-await sister.signIn("sister@example.test");
+await sister.signIn(SISTER);
 r = await sister.req("POST", `/invites/${inviteToken}/accept`);
 assert.equal(r.status, 200, JSON.stringify(r.data));
 r = await sister.req("GET", `/memorials/${id}`);
@@ -127,7 +130,7 @@ assert.equal(r.data.items.length, 1);
 step("any admin can upgrade (dev: instant); 2 years hosting; slideshow unlocked");
 
 r = await owner.req("GET", `/memorials/${id}/members`);
-const sisterUid = r.data.members.find((m) => m.email === "sister@example.test").uid;
+const sisterUid = r.data.members.find((m) => m.email === SISTER).uid;
 r = await sister.req("DELETE", `/memorials/${id}/members/${r.data.members.find((m) => m.role === "owner").uid}`);
 assert.equal(r.status, 403, "admins can't remove the owner");
 await owner.req("POST", `/memorials/${id}/transfer`, { uid: sisterUid });
@@ -177,7 +180,7 @@ assert.equal(r.data.chapters.length, 8);
 step("stories file under chapters with their question; sealed letter hidden from the public");
 
 // The co-admin (now owner of Margaret's page) is invited to Arthur's page as admin and becomes legacy contact.
-r = await owner.req("POST", `/memorials/${live.id}/invites`, { email: "sister@example.test", role: "admin" });
+r = await owner.req("POST", `/memorials/${live.id}/invites`, { email: SISTER, role: "admin" });
 const tok2 = new URL(r.data.devLink).searchParams.get("t");
 await sister.req("POST", `/invites/${tok2}/accept`);
 r = await sister.req("GET", `/memorials/${live.id}/chapters/${ch.id}/stories`);
@@ -232,5 +235,37 @@ assert.equal(vid.data.byteLength, big.length, "combined video is complete");
 const ranged = await fetch(`${BASE}/api/media/${id}/${vidId}/original`, { headers: { range: "bytes=0-99" } });
 assert.equal(ranged.status, 206);
 step("17 MB video uploads in chunks, combines in Storage, and streams with range requests");
+
+// ---------------------------------------------------------------- recovery and anniversaries
+const FS = "http://127.0.0.1:8080/v1/projects/demo-lifeguestbook/databases/(default)/documents";
+const fsPatch = (path, fields) => fetch(`${FS}/${path}?${Object.keys(fields).map((k) => `updateMask.fieldPaths=${k}`).join("&")}`, {
+  method: "PATCH", headers: { Authorization: "Bearer owner", "content-type": "application/json" },
+  body: JSON.stringify({ fields: Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, typeof v === "number" ? { integerValue: String(v) } : { stringValue: v }])) }),
+});
+// Arthur's page (now a memorial) is owned by `owner`, with sister as admin. The owner goes quiet.
+const ownerUid = (await owner.req("GET", "/me")).data.user.uid;
+await fsPatch(`users/${ownerUid}`, { lastSeenAt: Date.now() - 120 * 86400_000 });
+r = await sister.req("GET", `/memorials/${live.id}`);
+assert.ok(r.data.ownerInactiveDays >= 119);
+r = await sister.req("POST", `/memorials/${live.id}/recovery`);
+assert.equal(r.status, 200, JSON.stringify(r.data));
+r = await guest.req("POST", `/dev/run-jobs?now=${Date.now() + 15 * 86400_000}`);
+r = await sister.req("GET", `/memorials/${live.id}`);
+assert.equal(r.data.memorial.role, "owner", "ownership moves after 14 days of silence");
+step("inactive owner: an admin asks, and ownership moves after 14 days");
+
+// A year ago today.
+const today = new Date();
+const aYearAgo = `${today.getUTCFullYear() - 1}-${String(today.getUTCMonth() + 1).padStart(2, "0")}-${String(today.getUTCDate()).padStart(2, "0")}`;
+await sister.req("PATCH", `/memorials/${live.id}`, { died: aYearAgo });
+r = await guest.req("POST", "/dev/run-jobs");
+r = await owner.req("GET", "/dev/emails");
+assert.ok(r.data.emails.some((e) => e.subject.startsWith("Remembering Arthur, a year on")), "anniversary email sent");
+step("anniversary email goes to admins a year on");
+
+// Email unsubscribe links must work without signing in.
+const unsub = await fetch(`${BASE}/api/email/unsubscribe?u=x&s=bad`);
+assert.equal(unsub.status, 400, "unsubscribe reachable signed-out (bad signature rejected)");
+step("unsubscribe links work without signing in");
 
 console.log("\nAll smoke checks passed.");

@@ -1,5 +1,7 @@
 # Life Guestbook: product and build plan
 
+> **Status (5 Nov 2026):** Phases 1–4 are built and tested on the emulators: memorial pages, multi-admin, moderation, email, payments, slideshow, Living Legacy, AI writing help, chunked video uploads, link previews, the memory book, owner recovery and anniversaries. See the README for what's live and the go-live steps.
+
 lifeguestbook.com. Draft v1, 5 November 2026.
 
 Life Guestbook is one shared, permanent place for a person's life story. Family and friends build it together, before or after the person passes. One link or QR code collects photos and memories from everyone, including people who can't attend the service. On the day, the same page runs the guestbook and live slideshow. It is always co-managed by several admins, so it is never locked to one person's email.

@@ -94,8 +94,9 @@ app.get("/dev/emails", async (c) => {
 });
 app.post("/dev/run-jobs", async (c) => {
   if (!isDev()) return c.notFound();
-  const digests = await runDigests(c.env, Date.now(), true);
-  const daily = await runDailyJobs(c.env);
+  const now = Number(c.req.query("now")) || Date.now(); // lets the smoke test jump ahead in time
+  const digests = await runDigests(c.env, now, true);
+  const daily = await runDailyJobs(c.env, now);
   return c.json({ digests, daily });
 });
 

@@ -53,7 +53,13 @@ export interface MemorialDoc {
   legacyContactUid?: string | null;
   aiUses?: number;
   convertedAt?: number;
+  /** "MM-DD" of the date they died, for anniversary emails. */
+  diedMD?: string | null;
+  anniversarySentYear?: number;
+  recovery?: { requestedBy: string; at: number } | null;
 }
+
+export const diedMD = (died?: string | null) => (died && /^\d{4}-\d{2}-\d{2}$/.test(died) ? died.slice(5) : null);
 
 export interface MemberDoc {
   role: Role;

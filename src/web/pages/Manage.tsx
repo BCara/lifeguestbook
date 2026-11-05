@@ -23,14 +23,16 @@ export function Manage({ id }: { id: string }) {
 function ManageInner({ id }: { id: string }) {
   const [m, setM] = useState<MemorialAdmin>();
   const [pendingTransfer, setPendingTransfer] = useState<{ toUid: string } | null>(null);
+  const [succession, setSuccession] = useState<{ ownerInactiveDays: number; recovery: { requestedBy: string; at: number } | null }>({ ownerInactiveDays: 0, recovery: null });
   const [error, setError] = useState<string>();
   const [tab, setTab] = useState<Tab>((query(location.search, "tab") as Tab) ?? "");
   const { me } = useSession();
   const load = useCallback(async () => {
     try {
-      const r = await api.get<{ memorial: MemorialAdmin; pendingTransfer: { toUid: string } | null }>(`/memorials/${id}`);
+      const r = await api.get<{ memorial: MemorialAdmin; pendingTransfer: { toUid: string } | null; ownerInactiveDays: number; recovery: { requestedBy: string; at: number } | null }>(`/memorials/${id}`);
       setM(r.memorial);
       setPendingTransfer(r.pendingTransfer);
+      setSuccession({ ownerInactiveDays: r.ownerInactiveDays, recovery: r.recovery });
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Couldn't load this page.");
     }
@@ -93,7 +95,7 @@ function ManageInner({ id }: { id: string }) {
         {current === "story" && <LifeStory m={m} onChange={load} />}
         {current === "memories" && <Review m={m} onChange={load} status="all" />}
         {current === "writing" && <WritingHelp m={m} onChange={load} />}
-        {current === "people" && <People m={m} onChange={load} />}
+        {current === "people" && <People m={m} onChange={load} succession={succession} />}
         {current === "share" && <Share m={m} />}
         {current === "dayof" && <DayOf m={m} onChange={load} />}
         {current === "plan" && <Plan m={m} onChange={load} />}
@@ -187,7 +189,7 @@ export function Media({ c, full }: { c: ContributionView; full?: boolean }) {
   return null;
 }
 
-function People({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
+function People({ m, onChange, succession }: { m: MemorialAdmin; onChange: () => void; succession: { ownerInactiveDays: number; recovery: { requestedBy: string; at: number } | null } }) {
   const [data, setData] = useState<{ members: MemberView[]; invites: InviteView[] }>();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("admin");
@@ -270,6 +272,20 @@ function People({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
           {msg && <p className="small">{msg}</p>}
           {devLink && <p className="dev small">Local test: <a href={devLink}>invitation link</a></p>}
         </form>
+      )}
+      {succession.recovery && (
+        <div className="notice">
+          {succession.recovery.requestedBy === me?.uid ? "You've asked to take over this page. " : m.role === "owner" ? "An admin has asked to take over this page because you hadn't signed in for a while. " : "An admin has asked to take over this page. "}
+          It moves on {new Date(succession.recovery.at + 14 * 864e5).toLocaleDateString()} unless the owner cancels.{" "}
+          {(m.role === "owner" || succession.recovery.requestedBy === me?.uid) && <button className="link" onClick={async () => { await api.post(`/memorials/${m.id}/recovery/cancel`); onChange(); }}>Cancel the request</button>}
+        </div>
+      )}
+      {m.role === "admin" && !succession.recovery && succession.ownerInactiveDays >= 90 && (
+        <div className="card stack">
+          <h3>The owner hasn't signed in for {succession.ownerInactiveDays} days</h3>
+          <p className="small">If they can't look after the page any more, you can ask to become the owner. We'll email them, and if they don't say no within 14 days, ownership moves to you. They stay on as an admin.</p>
+          <button className="btn secondary small" onClick={async () => { await api.post(`/memorials/${m.id}/recovery`).catch((e) => alert(e.message)); onChange(); }}>Ask to become the owner</button>
+        </div>
       )}
       {m.mode === "living" && data && <Succession m={m} members={data.members} onChange={onChange} />}
       {m.role === "owner" && <p className="muted small">If you ever step back, use "Make owner" to hand the page to another admin. Admins keep full access to photos, stories and moderation either way.</p>}
@@ -474,7 +490,10 @@ function Settings({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
       <div className="card stack">
         <h3>Download everything</h3>
         <p className="muted small">A ZIP of every approved photo, video and recording, plus all the written memories.</p>
-        <a className="btn secondary small" href={`/api/memorials/${m.id}/download`}>Download ZIP</a>
+        <div className="row gap wrap">
+          <a className="btn secondary small" href={`/api/memorials/${m.id}/download`}>Download ZIP</a>
+          <Link to={`/dashboard/${m.id}/book`} className="btn secondary small">Printable memory book</Link>
+        </div>
       </div>
       <div className="card stack">
         <h3>Activity</h3>

@@ -11,6 +11,7 @@ import {
   audit,
   bucket,
   contributions,
+  diedMD,
   getMemorial,
   invites,
   isSealed,
@@ -45,7 +46,8 @@ async function addMember(mid: string, uid: string, email: string, role: Role, by
 }
 
 export const hostRoutes = new Hono<AppEnv>()
-  .use("*", requireUser)
+  .use("/memorials", requireUser)
+  .use("/memorials/*", requireUser)
 
   // ------------------------------------------------------------------ memorials
   .get("/memorials", async (c) => {
@@ -90,6 +92,7 @@ export const hostRoutes = new Hono<AppEnv>()
       counts: { pending: 0, approved: 0, total: 0 },
       createdAt: Date.now(),
     };
+    doc.diedMD = diedMD(doc.died);
     const clean = JSON.parse(JSON.stringify(doc)) as MemorialDoc;
     const ref = await memorials().add(clean);
     await walls().doc(sha256(clean.wallKey)).set({ memorialId: ref.id });
@@ -107,7 +110,9 @@ export const hostRoutes = new Hono<AppEnv>()
     const role = await roleOf(id, c.get("uid"));
     const m = role && can(role, "view_dashboard") ? await getMemorial(id) : null;
     if (!m || !role) return c.json({ error: "Not found" }, 404);
-    return c.json({ memorial: adminView(id, m, role), pendingTransfer: m.pendingTransfer ?? null });
+    const owner = (await users().doc(m.ownerId).get()).data() as UserDoc | undefined;
+    const ownerInactiveDays = owner ? Math.floor((Date.now() - (owner.lastSeenAt ?? owner.createdAt)) / 86400_000) : 0;
+    return c.json({ memorial: adminView(id, m, role), pendingTransfer: m.pendingTransfer ?? null, ownerInactiveDays, recovery: m.recovery ?? null });
   })
   .patch("/memorials/:id", async (c) => {
     const id = c.req.param("id");
@@ -128,6 +133,7 @@ export const hostRoutes = new Hono<AppEnv>()
       update.service = JSON.parse(JSON.stringify({ date: str(s.date, 10), time: str(s.time, 20), place: str(s.place, 200), livestreamUrl: str(s.livestreamUrl, 300) }));
     }
     if (update.name === null) return c.json({ error: "Name can't be empty." }, 400);
+    if ("died" in update) update.diedMD = diedMD(update.died as string | null);
     await memorials().doc(id).update(update);
     await logAudit(id, uid, "settings", undefined, Object.keys(update).join(","));
     const m = (await getMemorial(id))!;

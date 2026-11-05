@@ -8,6 +8,8 @@ import { MemorialPage } from "./pages/Memorial";
 import { Print } from "./pages/Print";
 import { SignIn } from "./pages/SignIn";
 import { Wall } from "./pages/Wall";
+import { Book } from "./pages/Book";
+import { Faq, Privacy, Terms } from "./pages/Info";
 import { useLocation } from "./router";
 
 export function App() {
@@ -19,6 +21,10 @@ export function App() {
   if (path === "/new") return <Create />;
   if (path === "/invite") return <Invite />;
   if (path === "/wall") return <Wall />;
+  if (path === "/faq") return <Faq />;
+  if (path === "/privacy") return <Privacy />;
+  if (path === "/terms") return <Terms />;
+  if ((match = path.match(/^\/dashboard\/([\w-]+)\/book$/))) return <Book id={match[1]} />;
   if ((match = path.match(/^\/dashboard\/([\w-]+)\/print$/))) return <Print id={match[1]} />;
   if ((match = path.match(/^\/dashboard\/([\w-]+)$/))) return <Manage id={match[1]} />;
   if ((match = path.match(/^\/m\/([\w-]+)\/add$/))) return <AddMemory slug={match[1]} />;

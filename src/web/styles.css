@@ -225,3 +225,25 @@ details summary { cursor: pointer; font-weight: 600; }
 .timeline-story p { margin: 0; }
 .timeline-story .media { border-radius: 8px; max-height: 420px; object-fit: contain; align-self: flex-start; max-width: 100%; }
 .timeline-story .byline { font-size: .88rem; font-weight: 600; }
+
+.footer-links a { color: var(--muted); }
+.prose h3 { margin-top: 28px; }
+.prose p { color: #4a3f36; }
+/* Memory book */
+.book { background: #fff; color: #2f2721; }
+.book-toolbar { padding: 16px; background: var(--bg); position: sticky; top: 0; z-index: 2; }
+.book-page { max-width: 148mm; margin: 0 auto; padding: 18mm 0; page-break-after: always; break-after: page; }
+.book-a4 .book-page { max-width: 180mm; }
+.book-page h2 { font-size: 1.7rem; margin: 0 0 18px; }
+.book-page p { font: 1.02rem/1.7 var(--serif); }
+.book-cover { text-align: center; min-height: 170mm; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+.book-cover img { width: 70%; max-height: 110mm; object-fit: cover; border-radius: 4px; margin-bottom: 14mm; }
+.book-cover h1 { font-size: 2.4rem; margin: 6px 0; }
+.book-dates { font-size: 1.3rem !important; color: var(--muted); }
+.book-memory { break-inside: avoid; page-break-inside: avoid; margin: 0 0 12mm; }
+.book-memory img { width: 100%; max-height: 120mm; object-fit: contain; display: block; margin-bottom: 4mm; }
+.book-text { margin: 0 0 2mm; white-space: pre-wrap; }
+.book-by { font: 600 .85rem var(--sans) !important; color: var(--muted); margin: 0; }
+.book-people { line-height: 2 !important; }
+.book-end { text-align: center; }
+@media print { .book-page { padding: 0; max-width: none; } .book-toolbar { display: none; } }

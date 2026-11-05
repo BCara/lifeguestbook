@@ -1,7 +1,10 @@
 // Daily jobs: renewal reminders (30 days, 7 days, lapsed), the day-before checklist and the recap
 // the day after the service.
 import { adminEmails, bucket, contributions, db, limits, memorials, type ContributionDoc, type MemorialDoc } from "./db";
-import { dayBeforeEmail, recapEmail, renewalEmail, sendEmail } from "./email";
+import { anniversaryEmail, dayBeforeEmail, recapEmail, renewalEmail, sendEmail } from "./email";
+import { unsubscribeUrl } from "./notify";
+import { logAudit, members, memberships, users, type UserDoc } from "./db";
+import { RECOVERY_WAIT_DAYS } from "./routes/legacy";
 import type { Env } from "./env";
 
 const DAY = 24 * 3600_000;
@@ -54,6 +57,41 @@ export async function runDailyJobs(env: Env, now = Date.now()) {
     }
     await d.ref.update({ recapSentAt: now, notifyMode: "digest" });
   }
+  // Anniversaries.
+  const year = new Date(now).getUTCFullYear();
+  const anniversaries = await memorials().where("diedMD", "==", today.slice(5)).get();
+  for (const d of anniversaries.docs) {
+    const m = d.data() as MemorialDoc;
+    const years = m.died ? year - Number(m.died.slice(0, 4)) : 0;
+    if (m.mode !== "memorial" || years < 1 || m.anniversarySentYear === year) continue;
+    for (const a of await adminEmails(d.id)) {
+      await sendEmail(env, anniversaryEmail(a.email, m.name, years, `${env.APP_ORIGIN}/m/${m.slug}`, unsubscribeUrl(env, a.uid)));
+      sent++;
+    }
+    await d.ref.update({ anniversarySentYear: year });
+  }
+
+  // Ownership recovery: complete after the wait unless the owner came back.
+  const recoveries = await memorials().where("recovery.at", "<", now).get();
+  for (const d of recoveries.docs) {
+    const m = d.data() as MemorialDoc;
+    if (!m.recovery) continue;
+    const owner = (await users().doc(m.ownerId).get()).data() as UserDoc | undefined;
+    if (owner && (owner.lastSeenAt ?? 0) > m.recovery.at) {
+      await d.ref.update({ recovery: null });
+      await logAudit(d.id, m.ownerId, "recovery_cancelled_owner_returned");
+      continue;
+    }
+    if (now - m.recovery.at < RECOVERY_WAIT_DAYS * DAY) continue;
+    const to = m.recovery.requestedBy;
+    await members(d.id).doc(to).update({ role: "owner" });
+    await memberships(to).doc(d.id).set({ role: "owner" }, { merge: true });
+    await members(d.id).doc(m.ownerId).update({ role: "admin" }).catch(() => undefined);
+    await memberships(m.ownerId).doc(d.id).set({ role: "admin" }, { merge: true });
+    await d.ref.update({ ownerId: to, recovery: null, pendingTransfer: null });
+    await logAudit(d.id, to, "recovery_completed", m.ownerId);
+  }
+
   await cleanUp(now);
   return sent;
 }
