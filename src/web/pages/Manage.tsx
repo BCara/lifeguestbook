@@ -7,8 +7,10 @@ import { api, ApiError } from "../api";
 import { CopyField, Header, lifeDates, QrImage, RequireSignIn, timeAgo } from "../components";
 import { Link, navigate, query } from "../router";
 import { useSession } from "../session";
+import { LifeStory } from "./LifeStory";
+import { WritingHelp } from "./WritingHelp";
 
-type Tab = "review" | "memories" | "people" | "share" | "dayof" | "plan" | "settings";
+type Tab = "review" | "story" | "memories" | "writing" | "people" | "share" | "dayof" | "plan" | "settings";
 
 export function Manage({ id }: { id: string }) {
   return (
@@ -22,7 +24,7 @@ function ManageInner({ id }: { id: string }) {
   const [m, setM] = useState<MemorialAdmin>();
   const [pendingTransfer, setPendingTransfer] = useState<{ toUid: string } | null>(null);
   const [error, setError] = useState<string>();
-  const [tab, setTab] = useState<Tab>((query(location.search, "tab") as Tab) ?? "review");
+  const [tab, setTab] = useState<Tab>((query(location.search, "tab") as Tab) ?? "");
   const { me } = useSession();
   const load = useCallback(async () => {
     try {
@@ -39,10 +41,14 @@ function ManageInner({ id }: { id: string }) {
   }, [load]);
   if (error) return (<><Header /><main className="narrow"><p className="error">{error}</p><Link to="/dashboard">Back to your pages</Link></main></>);
   if (!m) return <div className="page-center muted">Loading…</div>;
+  const current: Tab = tab || (m.mode === "living" ? "story" : "review");
   const welcome = query(location.search, "welcome");
   const tabs: [Tab, string, boolean][] = [
+    ...(m.mode === "living" ? ([["story", "Life story", true]] as [Tab, string, boolean][]) : []),
     ["review", `Review${m.counts.pending ? ` (${m.counts.pending})` : ""}`, true],
+    ...(m.mode === "memorial" ? ([["story", "Chapters", true]] as [Tab, string, boolean][]) : []),
     ["memories", "Memories", true],
+    ["writing", "✦ Writing help", can(m.role, "manage_settings")],
     ["people", "People", true],
     ["share", "Share", true],
     ["dayof", "On the day", true],
@@ -57,7 +63,7 @@ function ManageInner({ id }: { id: string }) {
           <div>
             <p className="muted small"><Link to="/dashboard">Your pages</Link> / {ROLE_LABELS[m.role]}</p>
             <h1>{m.name}</h1>
-            <p className="muted">{lifeDates(m.born, m.died)} {m.mode === "living" && "· Living Legacy"}</p>
+            <p className="muted">{[lifeDates(m.born, m.died), m.mode === "living" ? "Living Legacy" : ""].filter(Boolean).join(" · ")}</p>
           </div>
           <Link to={`/m/${m.slug}`} className="btn secondary">View page</Link>
         </div>
@@ -78,18 +84,20 @@ function ManageInner({ id }: { id: string }) {
         )}
         <nav className="tabs">
           {tabs.filter((t) => t[2]).map(([key, label]) => (
-            <button key={key} ref={(el) => { if (tab === key && el) el.parentElement?.scrollTo({ left: el.offsetLeft - 24 }); }} className={tab === key ? "on" : ""} onClick={() => { setTab(key); history.replaceState(null, "", `?tab=${key}`); }}>
+            <button key={key} ref={(el) => { if (current === key && el) el.parentElement?.scrollTo({ left: el.offsetLeft - 24 }); }} className={current === key ? "on" : ""} onClick={() => { setTab(key); history.replaceState(null, "", `?tab=${key}`); }}>
               {label}
             </button>
           ))}
         </nav>
-        {tab === "review" && <Review m={m} onChange={load} status="pending" />}
-        {tab === "memories" && <Review m={m} onChange={load} status="all" />}
-        {tab === "people" && <People m={m} onChange={load} />}
-        {tab === "share" && <Share m={m} />}
-        {tab === "dayof" && <DayOf m={m} onChange={load} />}
-        {tab === "plan" && <Plan m={m} onChange={load} />}
-        {tab === "settings" && <Settings m={m} onChange={load} />}
+        {current === "review" && <Review m={m} onChange={load} status="pending" />}
+        {current === "story" && <LifeStory m={m} onChange={load} />}
+        {current === "memories" && <Review m={m} onChange={load} status="all" />}
+        {current === "writing" && <WritingHelp m={m} onChange={load} />}
+        {current === "people" && <People m={m} onChange={load} />}
+        {current === "share" && <Share m={m} />}
+        {current === "dayof" && <DayOf m={m} onChange={load} />}
+        {current === "plan" && <Plan m={m} onChange={load} />}
+        {current === "settings" && <Settings m={m} onChange={load} />}
       </main>
     </>
   );
@@ -263,6 +271,7 @@ function People({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
           {devLink && <p className="dev small">Local test: <a href={devLink}>invitation link</a></p>}
         </form>
       )}
+      {m.mode === "living" && data && <Succession m={m} members={data.members} onChange={onChange} />}
       {m.role === "owner" && <p className="muted small">If you ever step back, use "Make owner" to hand the page to another admin. Admins keep full access to photos, stories and moderation either way.</p>}
     </section>
   );
@@ -508,6 +517,52 @@ function CoverUpload({ m, onDone }: { m: MemorialAdmin; onDone: () => void }) {
           onDone();
         }} />
       </label>
+    </div>
+  );
+}
+
+function Succession({ m, members, onChange }: { m: MemorialAdmin; members: MemberView[]; onChange: () => void }) {
+  const { me } = useSession();
+  const [converting, setConverting] = useState(false);
+  const [died, setDied] = useState("");
+  const [date, setDate] = useState("");
+  const [place, setPlace] = useState("");
+  const [result, setResult] = useState<string>();
+  const admins = members.filter((x) => x.role === "admin");
+  const contact = members.find((x) => x.uid === m.legacyContactUid);
+  const mayConvert = m.role === "owner" || m.legacyContactUid === me?.uid;
+  const first = m.name.split(" ")[0];
+  return (
+    <div className="card stack">
+      <h3>When the time comes</h3>
+      <p className="small">Choose a <strong>legacy contact</strong>: the person who will turn this into {first}'s memorial page. Nothing recorded is lost, letters sealed "until I'm gone" open for the family, and friends can start sharing their memories.</p>
+      {m.role === "owner" ? (
+        <label>Legacy contact
+          <select value={m.legacyContactUid ?? ""} onChange={async (e) => { await api.post(`/memorials/${m.id}/legacy-contact`, { uid: e.target.value || null }); onChange(); }}>
+            <option value="">Not chosen yet</option>
+            {admins.map((a) => <option key={a.uid} value={a.uid}>{a.email}</option>)}
+          </select>
+          {admins.length === 0 && <span className="muted small">Invite an admin first.</span>}
+        </label>
+      ) : <p className="small">Legacy contact: {contact ? contact.email : "not chosen yet"}</p>}
+      {mayConvert && !converting && <button className="btn ghost small" onClick={() => setConverting(true)}>Turn this into a memorial page…</button>}
+      {converting && (
+        <form className="stack" onSubmit={async (e) => {
+          e.preventDefault();
+          const r = await api.post<{ lettersOpened: number }>(`/memorials/${m.id}/convert`, { died, service: { date, place } });
+          setResult(`${m.name}'s page is now a memorial.${r.lettersOpened ? ` ${r.lettersOpened} sealed ${r.lettersOpened === 1 ? "letter has" : "letters have"} opened for the family.` : ""}`);
+          onChange();
+        }}>
+          <p className="small">We're so sorry. This changes the page to "In loving memory", opens sealed letters for the family and lets everyone share memories.</p>
+          <label>Date {first} passed away<input type="date" required value={died} onChange={(e) => setDied(e.target.value)} /></label>
+          <div className="row gap wrap">
+            <label className="grow">Service date (optional)<input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+            <label className="grow">Place (optional)<input value={place} onChange={(e) => setPlace(e.target.value)} /></label>
+          </div>
+          <div className="row gap"><button className="btn">Make it a memorial</button><button type="button" className="link" onClick={() => setConverting(false)}>Cancel</button></div>
+        </form>
+      )}
+      {result && <p className="notice">{result}</p>}
     </div>
   );
 }

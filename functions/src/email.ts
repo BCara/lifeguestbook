@@ -147,6 +147,19 @@ export function renewalEmail(to: string, memorialName: string, daysLeft: number,
   };
 }
 
+export function conversionEmail(to: string, memorialName: string, actor: string, lettersOpened: number, dashboardUrl: string): Email {
+  return {
+    to,
+    subject: `${memorialName}'s page is now a memorial`,
+    html: layout(`In memory of ${memorialName}`,
+      p(`${esc(actor)} has marked ${esc(memorialName)}'s Living Legacy page as a memorial. Everything ${esc(memorialName.split(" ")[0])} recorded is safe, and friends can now share their memories too.`) +
+      (lettersOpened ? p(`<strong>${lettersOpened} sealed ${lettersOpened === 1 ? "letter has" : "letters have"} opened</strong> and can be read from the dashboard by the family.`) : "") +
+      p("From the dashboard you can add the service details, share the link, and print QR cards for the day."),
+      { label: "Open dashboard", url: dashboardUrl }),
+    text: `${memorialName}'s page is now a memorial. ${lettersOpened} sealed letters opened. ${dashboardUrl}`,
+  };
+}
+
 export function dayBeforeEmail(to: string, memorialName: string, wallUrl: string, dashboardUrl: string): Email {
   return {
     to,

@@ -30,7 +30,20 @@ export interface MemorialPublic {
   frozen: boolean;
 }
 
+export interface ChapterView {
+  id: string;
+  title: string;
+  order: number;
+  era?: string;
+  stories?: number;
+  questions?: { question: string; why: string }[];
+}
+
+export const DEFAULT_CHAPTERS = ["Early years", "Growing up", "School days", "Work and calling", "Love and family", "Places that mattered", "Proudest moments", "Advice and wishes"];
+
 export interface MemorialAdmin extends MemorialPublic {
+  legacyContactUid?: string | null;
+  aiUses: number;
   moderation: ModerationMode;
   plan: PlanState;
   role: Role;
@@ -39,8 +52,18 @@ export interface MemorialAdmin extends MemorialPublic {
   notifyMode: "digest" | "instant";
 }
 
+export interface SealedInfo {
+  /** "passing" = opens when the page becomes a memorial; otherwise a YYYY-MM-DD date. */
+  until: string;
+  to?: string;
+  open: boolean;
+}
+
 export interface ContributionView {
   id: string;
+  chapterId?: string;
+  prompt?: string;
+  sealed?: SealedInfo;
   type: ContributionType;
   text?: string;
   authorName: string;

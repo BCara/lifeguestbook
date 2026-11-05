@@ -50,6 +50,9 @@ export interface MemorialDoc {
   recapSentAt?: number;
   dayBeforeSentAt?: number;
   stripeCustomerId?: string;
+  legacyContactUid?: string | null;
+  aiUses?: number;
+  convertedAt?: number;
 }
 
 export interface MemberDoc {
@@ -75,6 +78,17 @@ export interface ContributionDoc {
   createdAt: number;
   ipHash?: string;
   notifiedApproved?: boolean;
+  chapterId?: string | null;
+  prompt?: string;
+  sealed?: { until: string; to?: string; openedAt?: number };
+  reported?: boolean;
+}
+
+/** A sealed letter stays closed until the page becomes a memorial ("passing") or its date arrives. */
+export function isSealed(c: Pick<ContributionDoc, "sealed">, now = Date.now()) {
+  if (!c.sealed || c.sealed.openedAt) return false;
+  if (c.sealed.until === "passing") return true;
+  return c.sealed.until > new Date(now).toISOString().slice(0, 10);
 }
 
 export interface InviteDoc {

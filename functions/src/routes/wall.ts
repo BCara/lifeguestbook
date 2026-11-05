@@ -15,7 +15,7 @@ export const wallRoutes = new Hono<AppEnv>().get("/", async (c) => {
   if (!m || !mid) return c.json({ error: "This slideshow link isn't valid any more." }, 404);
   if (!allowance(m.plan).slideshow) return c.json({ error: "The live slideshow is part of the upgraded page.", name: m.name, locked: true }, 402);
   const snap = await contributions(mid).where("status", "==", "approved").orderBy("createdAt", "desc").limit(400).get();
-  const items = snap.docs.map((d) => {
+  const items = snap.docs.filter((d) => !(d.data() as ContributionDoc).sealed).map((d) => {
     const v = contributionView(mid, d.id, d.data() as ContributionDoc, false);
     const k = `k=${encodeURIComponent(key)}`;
     return { ...v, mediaUrl: v.mediaUrl && `${v.mediaUrl}?${k}`, thumbUrl: v.thumbUrl && `${v.thumbUrl}?${k}` };

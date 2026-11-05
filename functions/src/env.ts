@@ -6,6 +6,7 @@ export interface Env {
   STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
   SCREENING_ENABLED: boolean;
+  ANTHROPIC_API_KEY: string;
 }
 
 export const isEmulator = process.env.FUNCTIONS_EMULATOR === "true";

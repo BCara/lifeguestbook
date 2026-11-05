@@ -13,6 +13,7 @@ import {
   contributions,
   getMemorial,
   invites,
+  isSealed,
   logAudit,
   memberships,
   members,
@@ -31,6 +32,7 @@ import { isDev } from "../env";
 import { overLimit } from "../limits";
 import { storeImage } from "../media";
 import { adminView, contributionView } from "../views";
+import { seedChapters } from "./legacy";
 
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : undefined);
 const PRIVACY: Privacy[] = ["link", "public", "private"];
@@ -93,6 +95,7 @@ export const hostRoutes = new Hono<AppEnv>()
     await walls().doc(sha256(clean.wallKey)).set({ memorialId: ref.id });
     await addMember(ref.id, uid, user.email, "owner", undefined, user.name);
     await logAudit(ref.id, uid, "created");
+    if (mode === "living") await seedChapters(ref.id);
     // Optional co-admin invites straight from setup.
     const coAdmins = Array.isArray(b.coAdmins) ? (b.coAdmins as unknown[]).filter(validEmail).slice(0, 2) : [];
     for (const email of coAdmins) await createInvite(c.env, ref.id, clean, uid, user.email, email, "admin");
@@ -165,7 +168,7 @@ export const hostRoutes = new Hono<AppEnv>()
     let q = contributions(id).orderBy("createdAt", "desc").limit(300);
     if (status) q = contributions(id).where("status", "==", status).orderBy("createdAt", "desc").limit(300);
     const snap = await q.get();
-    return c.json({ contributions: snap.docs.map((d) => contributionView(id, d.id, d.data() as ContributionDoc, true)) });
+    return c.json({ contributions: snap.docs.map((d) => contributionView(id, d.id, d.data() as ContributionDoc, true, c.get("uid"))) });
   })
   .post("/memorials/:id/contributions/:cid", async (c) => {
     const { id, cid } = c.req.param();
@@ -366,6 +369,7 @@ export const hostRoutes = new Hono<AppEnv>()
     let i = 0;
     for (const d of snap.docs) {
       const cdoc = d.data() as ContributionDoc;
+      if (isSealed(cdoc)) continue;
       i++;
       const n = String(i).padStart(4, "0");
       lines.push(`#${n} ${cdoc.authorName}${cdoc.relation ? ` (${cdoc.relation})` : ""}${cdoc.era ? `, ${cdoc.era}` : ""} – ${new Date(cdoc.createdAt).toISOString().slice(0, 10)}`);

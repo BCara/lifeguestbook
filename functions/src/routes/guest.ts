@@ -8,7 +8,7 @@ import type { AppEnv } from "../auth";
 import { validEmail } from "../auth";
 import { applyCountDelta } from "../counts";
 import { sha256 } from "../crypto";
-import { bucket, contributions, logAudit, memorialBySlug, roleOf, type ContributionDoc, type MemorialDoc } from "../db";
+import { bucket, contributions, isSealed, logAudit, memorialBySlug, memorials, roleOf, type ContributionDoc, type MemorialDoc } from "../db";
 import { clientIp, overLimit } from "../limits";
 import { AUDIO_TYPES, extFor, IMAGE_TYPES, storeFile, storeImage, VIDEO_TYPES } from "../media";
 import { queue } from "../notify";
@@ -29,11 +29,17 @@ export const guestRoutes = new Hono<AppEnv>()
     if (!m) return c.json({ error: "Not found" }, 404);
     const role = await roleOf(m.id, c.get("uid"));
     if (m.privacy === "private" && !role) return c.json({ error: "This page is private.", private: true, name: m.name }, 403);
-    const snap = await contributions(m.id).where("status", "==", "approved").orderBy("createdAt", "desc").limit(500).get();
+    const [snap, ch] = await Promise.all([
+      contributions(m.id).where("status", "==", "approved").orderBy("createdAt", "desc").limit(500).get(),
+      memorials().doc(m.id).collection("chapters").orderBy("order").get(),
+    ]);
+    // Letters are for the family only, even once opened.
+    const visible = snap.docs.filter((d) => !(d.data() as ContributionDoc).sealed);
     return c.json({
       memorial: publicView(m.id, m),
       role,
-      contributions: snap.docs.map((d) => contributionView(m.id, d.id, d.data() as ContributionDoc, false)),
+      chapters: ch.docs.map((d) => ({ id: d.id, title: d.data().title as string, order: d.data().order as number, era: d.data().era as string | undefined })),
+      contributions: visible.map((d) => contributionView(m.id, d.id, d.data() as ContributionDoc, false)),
     });
   })
   .post("/:slug/contributions", async (c) => {
@@ -57,15 +63,22 @@ export const guestRoutes = new Hono<AppEnv>()
     const email = typeof form.email === "string" && validEmail(form.email) ? form.email.trim().toLowerCase() : undefined;
     const source = form.source === "event" ? "event" : "online";
     const file = form.file instanceof File && form.file.size > 0 ? form.file : null;
+    // Family members can file stories under a chapter, answer an interview question, or seal a letter.
+    const chapterId = role && typeof form.chapterId === "string" && form.chapterId ? form.chapterId.slice(0, 40) : undefined;
+    const prompt = role && typeof form.prompt === "string" ? form.prompt.trim().slice(0, 300) || undefined : undefined;
+    const sealUntil = role && typeof form.sealUntil === "string" && (form.sealUntil === "passing" || /^\d{4}-\d{2}-\d{2}$/.test(form.sealUntil)) ? form.sealUntil : undefined;
+    const sealed = sealUntil ? { until: sealUntil, to: typeof form.sealTo === "string" ? form.sealTo.trim().slice(0, 120) || undefined : undefined } : undefined;
     if (!authorName) return c.json({ error: "Please add your name so the family knows who shared this." }, 400);
     if (!file && !text) return c.json({ error: "Please add a photo, a recording or a few words." }, 400);
     if (file && file.size > MAX_UPLOAD_BYTES) return c.json({ error: "That file is too big (30 MB max). Try a shorter video." }, 413);
 
     let type: ContributionType = "text";
+    // Browsers report recordings as e.g. "audio/webm;codecs=opus".
+    const mime = file ? file.type.split(";")[0].trim().toLowerCase() : "";
     if (file) {
-      if (IMAGE_TYPES.has(file.type)) type = "photo";
-      else if (VIDEO_TYPES.has(file.type)) type = "video";
-      else if (AUDIO_TYPES.has(file.type)) type = "voice";
+      if (IMAGE_TYPES.has(mime)) type = "photo";
+      else if (VIDEO_TYPES.has(mime)) type = "video";
+      else if (AUDIO_TYPES.has(mime)) type = "voice";
       else return c.json({ error: "That file type isn't supported. Please share a photo, video or voice recording." }, 415);
       if (type === "video" && !allow.video) return c.json({ error: "Video is part of the upgraded page. You can share photos and written memories." }, 402);
       if (type === "voice" && !allow.voice) return c.json({ error: "Voice messages are part of the upgraded page." }, 402);
@@ -86,7 +99,7 @@ export const guestRoutes = new Hono<AppEnv>()
           return c.json({ error: "We couldn't read that photo. If it's from an iPhone, try 'Most Compatible' or a screenshot." }, 415);
         }
       } else {
-        media = await storeFile(prefix, buf, file.type, extFor(file.type));
+        media = await storeFile(prefix, buf, mime, extFor(mime));
       }
     }
     const screening = combine(await Promise.all(checks));
@@ -94,7 +107,7 @@ export const guestRoutes = new Hono<AppEnv>()
     const status = decideStatus(m, screening, trusted);
     const doc: ContributionDoc = JSON.parse(JSON.stringify({
       type, text: text || undefined, authorName, relation, era, authorEmail: email, authorUid: uid,
-      status, screening, media, source, createdAt: Date.now(), ipHash: sha256(ip),
+      status, screening, media, source, createdAt: Date.now(), ipHash: sha256(ip), chapterId, prompt, sealed,
       notifiedApproved: status === "approved",
     }));
     await ref.set(doc);
@@ -138,6 +151,7 @@ export const mediaRoutes = new Hono<AppEnv>().get("/:mid/:cid/:variant", async (
     const cdoc = snap.data() as ContributionDoc | undefined;
     if (!cdoc?.media) return c.notFound();
     if (cdoc.status !== "approved" && !can(role, "moderate")) return c.notFound();
+    if (cdoc.sealed && (!role || (isSealed(cdoc) && cdoc.authorUid !== c.get("uid")))) return c.notFound();
     path = variant === "thumb" ? cdoc.media.thumb : variant === "display" ? cdoc.media.display : cdoc.media.original;
     path ??= cdoc.media.display ?? cdoc.media.original;
   }

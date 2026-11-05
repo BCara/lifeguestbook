@@ -4,6 +4,7 @@ import { MAX_UPLOAD_BYTES } from "../../shared/plans";
 import { api, ApiError, uploadForm } from "../api";
 import { lifeDates } from "../components";
 import { Link, query } from "../router";
+import { canRecord, Recorder } from "../Recorder";
 
 const NAME_KEY = "lgb-name";
 const remember = (k: string, v?: string) => {
@@ -26,6 +27,7 @@ export function AddMemory({ slug }: { slug: string }) {
   const [email, setEmail] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [progress, setProgress] = useState<string>();
+  const [recording, setRecording] = useState<"audio" | "video" | null>(null);
   const [done, setDone] = useState<{ count: number; pending: boolean }>();
   const source = query(location.search, "src") === "qr" ? "event" : "online";
   useEffect(() => {
@@ -91,6 +93,14 @@ export function AddMemory({ slug }: { slug: string }) {
           <input type="file" multiple accept={accept} onChange={(e) => setFiles([...(e.target.files ?? [])])} />
           {files.length ? <span>{files.length} {files.length === 1 ? "file" : "files"} chosen</span> : <span><strong>Add photos</strong>{m.allowance.video ? ", videos or voice notes" : ""}</span>}
         </label>
+        {recording ? (
+          <Recorder kind={recording} maxSeconds={recording === "audio" ? 300 : 90} onCancel={() => setRecording(null)} onDone={(f) => { setFiles((xs) => [...xs, f]); setRecording(null); }} />
+        ) : m.allowance.voice && canRecord() ? (
+          <div className="row gap wrap">
+            <button type="button" className="btn secondary small" onClick={() => setRecording("audio")}>🎙 Record a voice message</button>
+            <button type="button" className="btn ghost small" onClick={() => setRecording("video")}>🎥 Record a video message</button>
+          </div>
+        ) : null}
         {files.length > 0 && (
           <div className="previews">
             {files.slice(0, 12).map((f, i) => f.type.startsWith("image/") ? <img key={i} src={URL.createObjectURL(f)} alt="" /> : <span key={i} className="file-chip">{f.name}</span>)}

@@ -146,4 +146,69 @@ assert.equal(r.status, 200);
 assert.ok(r.data.byteLength > 100);
 step("download ZIP works");
 
+// ---------------------------------------------------------------- Living Legacy + writing help
+r = await owner.req("POST", "/memorials", { name: "Arthur Bell", born: "1941-06-01", mode: "living" });
+const live = r.data;
+r = await owner.req("GET", `/memorials/${live.id}/chapters`);
+assert.equal(r.data.chapters.length, 8, "default chapters seeded");
+const ch = r.data.chapters[1];
+r = await owner.req("POST", `/memorials/${live.id}/chapters/${ch.id}/questions`);
+assert.equal(r.status, 200, JSON.stringify(r.data));
+assert.ok(r.data.questions.length >= 3);
+const q = r.data.questions[0].question;
+step("living page seeds chapters; interview questions suggested");
+
+fd = new FormData();
+fd.append("name", "Arthur"); fd.append("text", "We lived above the bakery on Bolton Street."); fd.append("chapterId", ch.id); fd.append("prompt", q);
+r = await owner.req("POST", `/m/${live.slug}/contributions`, undefined, fd);
+assert.equal(r.data.status, "approved", "family stories skip review");
+fd = new FormData();
+fd.append("name", "Arthur"); fd.append("text", "To my grandchildren: be kind, and always carry a hanky."); fd.append("chapterId", ch.id); fd.append("sealUntil", "passing"); fd.append("sealTo", "my grandchildren");
+r = await owner.req("POST", `/m/${live.slug}/contributions`, undefined, fd);
+const letterId = r.data.id;
+fd = new FormData();
+fd.append("name", "Guest"); fd.append("text", "sneaky"); fd.append("chapterId", ch.id); fd.append("sealUntil", "passing");
+r = await guest.req("POST", `/m/${live.slug}/contributions`, undefined, fd);
+const guestDoc = r.data.id;
+r = await guest.req("GET", `/m/${live.slug}`);
+assert.ok(r.data.contributions.some((c) => c.chapterId === ch.id && c.prompt === q), "story shows in public timeline");
+assert.ok(!r.data.contributions.some((c) => c.id === letterId), "sealed letter never public");
+assert.equal(r.data.chapters.length, 8);
+step("stories file under chapters with their question; sealed letter hidden from the public");
+
+// The co-admin (now owner of Margaret's page) is invited to Arthur's page as admin and becomes legacy contact.
+r = await owner.req("POST", `/memorials/${live.id}/invites`, { email: "sister@example.test", role: "admin" });
+const tok2 = new URL(r.data.devLink).searchParams.get("t");
+await sister.req("POST", `/invites/${tok2}/accept`);
+r = await sister.req("GET", `/memorials/${live.id}/chapters/${ch.id}/stories`);
+const env = r.data.stories.find((x) => x.id === letterId);
+assert.ok(env.sealed && !env.sealed.open && !env.text, "other admins see only the envelope");
+r = await owner.req("POST", `/memorials/${live.id}/legacy-contact`, { uid: sisterUid });
+assert.equal(r.status, 200);
+r = await sister.req("POST", `/memorials/${live.id}/convert`, { died: "2026-11-01" });
+assert.equal(r.status, 200, JSON.stringify(r.data));
+assert.equal(r.data.lettersOpened, 1);
+r = await sister.req("GET", `/memorials/${live.id}/chapters/${ch.id}/stories`);
+assert.ok(r.data.stories.find((x) => x.id === letterId).text.includes("hanky"), "letter opens for the family");
+r = await guest.req("GET", `/m/${live.slug}`);
+assert.equal(r.data.memorial.mode, "memorial");
+assert.ok(!r.data.contributions.some((c) => c.id === letterId), "opened letters stay family-only");
+step("legacy contact converts to a memorial; sealed letter opens for family only");
+
+r = await sister.req("POST", `/memorials/${id}/ai/draft`, { kind: "eulogy", tone: "warm", speaker: "Her sister" });
+assert.equal(r.status, 200, JSON.stringify(r.data));
+assert.ok(r.data.text.length > 20);
+r = await sister.req("GET", `/memorials/${id}/drafts`);
+assert.equal(r.data.drafts.length, 1);
+r = await guest.req("POST", `/memorials/${id}/ai/draft`, { kind: "eulogy" });
+assert.equal(r.status, 401);
+step("writing help drafts a eulogy (sample text without an API key); drafts are kept");
+
+// Recorded voice notes arrive as "audio/webm;codecs=opus".
+fd = new FormData();
+fd.append("name", "Voice"); fd.append("file", new Blob([Buffer.from("fakeaudio")], { type: "audio/webm;codecs=opus" }), "voice.webm");
+r = await guest.req("POST", `/m/${slug}/contributions`, undefined, fd);
+assert.equal(r.status, 200, JSON.stringify(r.data));
+step("recorded voice notes with codec parameters are accepted on paid pages");
+
 console.log("\nAll smoke checks passed.");

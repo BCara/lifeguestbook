@@ -1,7 +1,7 @@
 import { allowance, isFrozen } from "../../src/shared/plans";
 import type { Role } from "../../src/shared/roles";
 import type { ContributionView, MemorialAdmin, MemorialPublic } from "../../src/shared/types";
-import type { ContributionDoc, MemorialDoc } from "./db";
+import { isSealed, type ContributionDoc, type MemorialDoc } from "./db";
 
 export const mediaUrl = (mid: string, cid: string, variant: "display" | "thumb" | "original") => `/api/media/${mid}/${cid}/${variant}`;
 
@@ -32,13 +32,24 @@ export function adminView(id: string, m: MemorialDoc, role: Role): MemorialAdmin
     counts: m.counts,
     wallKey: m.wallKey,
     notifyMode: m.notifyMode,
+    legacyContactUid: m.legacyContactUid ?? null,
+    aiUses: m.aiUses ?? 0,
   };
 }
 
-export function contributionView(mid: string, id: string, c: ContributionDoc, forAdmin: boolean): ContributionView {
+export function contributionView(mid: string, id: string, c: ContributionDoc, forAdmin: boolean, viewerUid?: string): ContributionView {
   const hasDisplay = !!c.media?.display;
+  const closed = isSealed(c) && c.authorUid !== viewerUid;
+  const sealed = c.sealed ? { until: c.sealed.until, to: c.sealed.to, open: !isSealed(c) } : undefined;
+  if (closed) {
+    // Only the writer sees a sealed letter before it opens; everyone else sees the envelope.
+    return { id, type: c.type, authorName: c.authorName, status: c.status, createdAt: c.createdAt, source: c.source, chapterId: c.chapterId ?? undefined, prompt: c.prompt, sealed };
+  }
   return {
     id,
+    chapterId: c.chapterId ?? undefined,
+    prompt: c.prompt,
+    sealed,
     type: c.type,
     text: c.text,
     authorName: c.authorName,

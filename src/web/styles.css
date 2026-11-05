@@ -179,3 +179,49 @@ label { font-size: .95rem; }
   .site-header .hide-sm { display: none; }
   .brand { font-size: 1.1rem; }
 }
+
+/* Life story, recorder, writing help */
+.row.gap-sm { gap: 4px; }
+.icon-btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; width: 30px; height: 30px; cursor: pointer; color: var(--muted); }
+.icon-btn:disabled { opacity: .35; cursor: default; }
+.chapters { display: flex; flex-direction: column; gap: 10px; }
+.chapter { padding: 14px 16px; }
+.chapter-title { border: 0; background: none; font: 400 1.1rem var(--serif); color: var(--ink); cursor: pointer; text-align: left; padding: 0; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.chapter-num { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--soft); font: 600 .8rem var(--sans); color: var(--accent); }
+.chapter-body { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 14px; }
+.chapter-body h4 { margin: 0; font: 600 .95rem var(--sans); }
+.questions { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.questions li { display: flex; justify-content: space-between; gap: 12px; align-items: center; background: var(--bg); border-radius: 10px; padding: 10px 12px; }
+.questions li.answered { opacity: .6; }
+.questions p { margin: 0; }
+.q { font-family: var(--serif); font-size: 1.05rem; margin: 0; }
+.q.pad { padding: 14px 16px 0; }
+.stories { display: flex; flex-direction: column; gap: 12px; }
+.story-item { background: var(--bg); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.story-item .media { max-width: 100%; border-radius: 8px; max-height: 360px; object-fit: contain; align-self: flex-start; }
+.story-item p { margin: 0; }
+.story-item.letter { background: #f4ecdf; border: 1px dashed #cdb89b; }
+.seal { font: 600 .85rem var(--sans); color: var(--warn); }
+.composer { background: var(--bg); }
+.composer h4 { margin: 0; font-family: var(--serif); font-weight: 400; font-size: 1.1rem; }
+.recorder { display: flex; flex-direction: column; gap: 12px; }
+.recorder-live { width: 100%; max-height: 320px; border-radius: 10px; background: #000; }
+.rec-dot { width: 12px; height: 12px; border-radius: 50%; background: #c0392b; animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+.kind-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.kind { text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 12px 14px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; font: inherit; color: inherit; }
+.kind.on { border: 2px solid var(--accent); padding: 11px 13px; background: #fff; }
+textarea.draft { font: 1.02rem/1.7 var(--serif); }
+.draft-history { list-style: none; padding: 0; margin: 10px 0 0; display: flex; flex-direction: column; gap: 6px; }
+details summary { cursor: pointer; font-weight: 600; }
+.timeline { margin: 0 0 48px; }
+.timeline-chapter { display: grid; grid-template-columns: 40px 1fr; gap: 16px; position: relative; }
+.timeline-chapter::before { content: ""; position: absolute; left: 19px; top: 40px; bottom: -8px; width: 2px; background: var(--line); }
+.timeline-chapter:last-child::before { display: none; }
+.timeline-marker span { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: #fff; font: 600 1rem var(--serif); }
+.timeline-body { padding-bottom: 28px; display: flex; flex-direction: column; gap: 12px; }
+.timeline-body h3 { margin: 8px 0 0; }
+.timeline-story { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.timeline-story p { margin: 0; }
+.timeline-story .media { border-radius: 8px; max-height: 420px; object-fit: contain; align-self: flex-start; max-width: 100%; }
+.timeline-story .byline { font-size: .88rem; font-weight: 600; }

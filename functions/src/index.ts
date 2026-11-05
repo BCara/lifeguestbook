@@ -12,6 +12,7 @@ import { runDigests } from "./notify";
 import { paymentRoutes, stripeWebhook } from "./payments";
 import { guestRoutes, mediaRoutes } from "./routes/guest";
 import { hostRoutes, inviteRoutes } from "./routes/host";
+import { legacyRoutes } from "./routes/legacy";
 import { wallRoutes } from "./routes/wall";
 
 process.setSourceMapsEnabled(true);
@@ -23,7 +24,8 @@ const SCREENING_ENABLED = defineBoolean("SCREENING_ENABLED", { default: false })
 const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
-const SECRETS = [RESEND_API_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET];
+const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
+const SECRETS = [RESEND_API_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, ANTHROPIC_API_KEY];
 
 const secret = (s: ReturnType<typeof defineSecret>) => {
   try {
@@ -42,6 +44,7 @@ function envFor(): Env {
     STRIPE_SECRET_KEY: secret(STRIPE_SECRET_KEY),
     STRIPE_WEBHOOK_SECRET: secret(STRIPE_WEBHOOK_SECRET),
     SCREENING_ENABLED: SCREENING_ENABLED.value(),
+    ANTHROPIC_API_KEY: secret(ANTHROPIC_API_KEY),
   };
 }
 
@@ -65,6 +68,7 @@ app.route("/media", mediaRoutes);
 app.route("/wall", wallRoutes);
 app.route("/invites", inviteRoutes);
 app.route("/payments", paymentRoutes);
+app.route("/", legacyRoutes);
 app.route("/", hostRoutes);
 
 app.get("/email/unsubscribe", async (c) => {
