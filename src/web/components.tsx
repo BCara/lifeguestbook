@@ -13,7 +13,7 @@ export function Header({ minimal }: { minimal?: boolean }) {
       </Link>
       {!minimal && (
         <nav>
-          <Link to="/#pricing">Pricing</Link>
+          {!me && <Link to="/#pricing">Pricing</Link>}
           {me ? (
             <>
               <Link to="/dashboard">Your pages</Link>

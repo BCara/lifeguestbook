@@ -55,7 +55,7 @@ function CreateInner() {
             Their name
             <input required value={f.name} onChange={set("name")} placeholder="e.g. Margaret Ellen Hughes" />
           </label>
-          <div className="row gap">
+          <div className="row gap wrap">
             <label className="grow">
               Born
               <input type="date" value={f.born} onChange={set("born")} />

@@ -34,7 +34,7 @@ function PrintInner({ id }: { id: string }) {
         </div>
         <button className="btn" onClick={() => window.print()}>Print</button>
       </div>
-      {layout === "cards" ? <div className="print-grid">{[0, 1, 2, 3].map((i) => <Card key={i} />)}</div> : <Card big />}
+      <div className="print-scroll">{layout === "cards" ? <div className="print-grid">{[0, 1, 2, 3].map((i) => <Card key={i} />)}</div> : <Card big />}</div>
     </div>
   );
 }

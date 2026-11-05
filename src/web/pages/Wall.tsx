@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ContributionView } from "../../shared/types";
-import { lifeDates } from "../components";
+import { lifeDates, QrImage } from "../components";
 import { query } from "../router";
 
 interface WallData { name: string; born?: string; died?: string; slug: string; coverUrl: string | null; wall: { paused?: boolean; pinnedId?: string | null; skip?: number }; items: ContributionView[] }
@@ -62,7 +62,7 @@ export function Wall() {
           {data.coverUrl && <img src={data.coverUrl} alt="" />}
           <h1>{data.name}</h1>
           <p>{lifeDates(data.born, data.died)}</p>
-          <p className="wall-hint">Scan the QR code on your table to share a photo or memory</p>
+          <div className="wall-hint"><QrImage value={`${location.origin}/m/${data.slug}/add?src=qr`} size={160} /><p>Scan to share a photo or memory</p></div>
         </div>
       </div>
     );
@@ -78,8 +78,8 @@ export function Wall() {
   return (
     <div className="wall" onDoubleClick={() => document.documentElement.requestFullscreen?.()}>
       <div className="wall-slide" key={current.id}>
-        {current.type === "photo" && <img src={current.mediaUrl} alt="" className="wall-photo" />}
-        {current.type === "video" && <video src={current.mediaUrl} autoPlay muted playsInline className="wall-photo" />}
+        {current.type === "photo" && <img src={current.mediaUrl} alt="" className={`wall-photo${current.text ? "" : " solo"}`} />}
+        {current.type === "video" && <video src={current.mediaUrl} autoPlay muted playsInline className={`wall-photo${current.text ? "" : " solo"}`} />}
         {(current.text || current.type === "voice") && (
           <blockquote className={current.type === "photo" || current.type === "video" ? "wall-caption" : "wall-quote"}>
             {current.text && <p>{current.text.length > 400 ? current.text.slice(0, 400) + "…" : current.text}</p>}
@@ -88,6 +88,7 @@ export function Wall() {
         )}
         {!current.text && current.type !== "voice" && <p className="wall-byline">{current.authorName}</p>}
       </div>
+      <div className="wall-qr"><QrImage value={`${location.origin}/m/${data.slug}/add?src=qr`} size={110} /><span>Scan to add yours</span></div>
       <div className="wall-footer">{data.name} · {lifeDates(data.born, data.died)}{paused ? " · paused" : ""}</div>
     </div>
   );

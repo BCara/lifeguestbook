@@ -78,7 +78,7 @@ function ManageInner({ id }: { id: string }) {
         )}
         <nav className="tabs">
           {tabs.filter((t) => t[2]).map(([key, label]) => (
-            <button key={key} className={tab === key ? "on" : ""} onClick={() => { setTab(key); history.replaceState(null, "", `?tab=${key}`); }}>
+            <button key={key} ref={(el) => { if (tab === key && el) el.parentElement?.scrollTo({ left: el.offsetLeft - 24 }); }} className={tab === key ? "on" : ""} onClick={() => { setTab(key); history.replaceState(null, "", `?tab=${key}`); }}>
               {label}
             </button>
           ))}

@@ -5,8 +5,14 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: Number(process.env.PORT) || 5173,
-    // The Hosting emulator applies the same /api rewrite as production.
-    proxy: { "/api": { target: "http://127.0.0.1:5002", changeOrigin: false } },
+    // Straight to the Functions emulator (same /api paths the Hosting rewrite gives in production).
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:5001",
+        changeOrigin: false,
+        rewrite: (path) => `/demo-lifeguestbook/us-central1/api${path}`,
+      },
+    },
   },
   build: { outDir: "dist" },
 });
