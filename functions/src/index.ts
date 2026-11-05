@@ -14,6 +14,7 @@ import { guestRoutes, mediaRoutes } from "./routes/guest";
 import { hostRoutes, inviteRoutes } from "./routes/host";
 import { legacyRoutes } from "./routes/legacy";
 import { wallRoutes } from "./routes/wall";
+import { uploadRoutes } from "./routes/uploads";
 
 process.setSourceMapsEnabled(true);
 
@@ -63,6 +64,7 @@ app.get("/me", (c) => {
   return c.json({ user: u ? { uid: u.uid, email: u.email, name: u.name } : null, dev: isDev() });
 });
 app.route("/auth", authRoutes);
+app.route("/m", uploadRoutes);
 app.route("/m", guestRoutes);
 app.route("/media", mediaRoutes);
 app.route("/wall", wallRoutes);

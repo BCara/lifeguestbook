@@ -14,6 +14,7 @@ import { AUDIO_TYPES, extFor, IMAGE_TYPES, storeFile, storeImage, VIDEO_TYPES } 
 import { queue } from "../notify";
 import { combine, screenImage, screenText, type ScreeningResult } from "../screening";
 import { contributionView, publicView } from "../views";
+import { finishUpload } from "./uploads";
 
 export function decideStatus(m: Pick<MemorialDoc, "moderation">, screening: ScreeningResult, trusted: boolean): ContributionStatus {
   if (screening.outcome === "critical") return "hidden";
@@ -69,7 +70,8 @@ export const guestRoutes = new Hono<AppEnv>()
     const sealUntil = role && typeof form.sealUntil === "string" && (form.sealUntil === "passing" || /^\d{4}-\d{2}-\d{2}$/.test(form.sealUntil)) ? form.sealUntil : undefined;
     const sealed = sealUntil ? { until: sealUntil, to: typeof form.sealTo === "string" ? form.sealTo.trim().slice(0, 120) || undefined : undefined } : undefined;
     if (!authorName) return c.json({ error: "Please add your name so the family knows who shared this." }, 400);
-    if (!file && !text) return c.json({ error: "Please add a photo, a recording or a few words." }, 400);
+    const uploadId = typeof form.uploadId === "string" ? form.uploadId : undefined;
+    if (!file && !text && !uploadId) return c.json({ error: "Please add a photo, a recording or a few words." }, 400);
     if (file && file.size > MAX_UPLOAD_BYTES) return c.json({ error: "That file is too big (30 MB max). Try a shorter video." }, 413);
 
     let type: ContributionType = "text";
@@ -100,6 +102,21 @@ export const guestRoutes = new Hono<AppEnv>()
         }
       } else {
         media = await storeFile(prefix, buf, mime, extFor(mime));
+      }
+    }
+    if (uploadId && !file) {
+      const done = await finishUpload(uploadId, m.id, prefix);
+      if (!done) return c.json({ error: "The upload didn't finish. Please try again." }, 400);
+      type = VIDEO_TYPES.has(done.mime) ? "video" : AUDIO_TYPES.has(done.mime) ? "voice" : "photo";
+      if (type === "photo") {
+        // A very large photo: process it like any other.
+        const [buf] = await bucket().file(done.path).download();
+        const stored = await storeImage(prefix, buf);
+        await bucket().file(done.path).delete().catch(() => undefined);
+        media = { display: stored.display, thumb: stored.thumb, mime: stored.mime, bytes: stored.bytes };
+        checks.push(screenImage(c.env, stored.displayBuffer));
+      } else {
+        media = { original: done.path, mime: done.mime, bytes: done.size };
       }
     }
     const screening = combine(await Promise.all(checks));

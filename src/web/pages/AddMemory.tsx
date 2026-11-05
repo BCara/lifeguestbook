@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { RELATIONS, type MemorialPublic } from "../../shared/types";
-import { MAX_UPLOAD_BYTES } from "../../shared/plans";
-import { api, ApiError, uploadForm } from "../api";
+import { MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from "../../shared/plans";
+import { api, ApiError, sendContribution } from "../api";
 import { lifeDates } from "../components";
 import { Link, query } from "../router";
 import { canRecord, Recorder } from "../Recorder";
@@ -64,21 +64,14 @@ export function AddMemory({ slug }: { slug: string }) {
         e.preventDefault();
         setError(undefined);
         remember(NAME_KEY, name);
-        const tooBig = files.find((f) => f.size > MAX_UPLOAD_BYTES);
-        if (tooBig) return setError(`"${tooBig.name}" is over 30 MB. Try a shorter clip.`);
+        const tooBig = files.find((f) => f.size > (f.type.startsWith("image/") ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES));
+        if (tooBig) return setError(`"${tooBig.name}" is too big (videos up to 200 MB). Try a shorter clip.`);
         const batches = files.length ? files : [null];
         let pending = false;
         try {
           for (let i = 0; i < batches.length; i++) {
-            const fd = new FormData();
-            fd.append("name", name);
-            fd.append("relation", relation);
-            fd.append("era", era);
-            fd.append("email", email);
-            fd.append("source", source);
-            if (i === 0 || !batches[i]) fd.append("text", text); // the words go with the first photo
-            if (batches[i]) fd.append("file", batches[i]!);
-            const r = await uploadForm<{ status: string }>(`/m/${slug}/contributions`, fd, (p) =>
+            const fields: Record<string, string> = { name, relation, era, email, source, text: i === 0 ? text : "" }; // the words go with the first file
+            const r = await sendContribution<{ status: string }>(slug, fields, batches[i], (p) =>
               setProgress(batches.length > 1 ? `Sending ${i + 1} of ${batches.length}… ${Math.round(p * 100)}%` : `Sending… ${Math.round(p * 100)}%`));
             if (r.status !== "approved") pending = true;
           }

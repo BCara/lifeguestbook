@@ -1,6 +1,6 @@
 // Daily jobs: renewal reminders (30 days, 7 days, lapsed), the day-before checklist and the recap
 // the day after the service.
-import { adminEmails, contributions, memorials, type ContributionDoc, type MemorialDoc } from "./db";
+import { adminEmails, bucket, contributions, db, limits, memorials, type ContributionDoc, type MemorialDoc } from "./db";
 import { dayBeforeEmail, recapEmail, renewalEmail, sendEmail } from "./email";
 import type { Env } from "./env";
 
@@ -54,5 +54,17 @@ export async function runDailyJobs(env: Env, now = Date.now()) {
     }
     await d.ref.update({ recapSentAt: now, notifyMode: "digest" });
   }
+  await cleanUp(now);
   return sent;
+}
+
+/** Abandoned chunked uploads and old rate-limit counters. */
+async function cleanUp(now: number) {
+  const stale = await db.collection("uploads").where("expiresAt", "<", now).limit(200).get();
+  for (const d of stale.docs) {
+    await bucket().deleteFiles({ prefix: `tmp/${d.id}/` }).catch(() => undefined);
+    await d.ref.delete();
+  }
+  const old = await limits().where("expiresAt", "<", now).limit(500).get();
+  await Promise.all(old.docs.map((d) => d.ref.delete()));
 }

@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ChapterView, ContributionView, MemorialAdmin } from "../../shared/types";
 import { can } from "../../shared/roles";
-import { api, ApiError, uploadForm } from "../api";
+import { api, ApiError, sendContribution } from "../api";
 import { timeAgo } from "../components";
 import { canRecord, Recorder } from "../Recorder";
 import { Media } from "./Manage";
@@ -139,16 +139,12 @@ export function Composer({ m, chapterId, prompt, letter, onDone, onCancel }: { m
     <form className="card stack composer" onSubmit={async (e) => {
       e.preventDefault();
       setError(undefined);
-      const fd = new FormData();
-      fd.append("name", name);
-      fd.append("text", text);
-      fd.append("relation", "Family");
-      if (chapterId) fd.append("chapterId", chapterId);
-      if (prompt) fd.append("prompt", prompt);
-      if (letter) { fd.append("sealUntil", sealUntil); fd.append("sealTo", sealTo); }
-      if (file) fd.append("file", file);
+      const fields: Record<string, string> = { name, text, relation: "Family" };
+      if (chapterId) fields.chapterId = chapterId;
+      if (prompt) fields.prompt = prompt;
+      if (letter) { fields.sealUntil = sealUntil; fields.sealTo = sealTo; }
       try {
-        await uploadForm(`/m/${m.slug}/contributions`, fd, (p) => setProgress(`Saving… ${Math.round(p * 100)}%`));
+        await sendContribution(m.slug, fields, file, (p) => setProgress(`Saving… ${Math.round(p * 100)}%`));
         onDone();
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "Couldn't save.");

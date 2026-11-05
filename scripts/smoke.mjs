@@ -211,4 +211,26 @@ r = await guest.req("POST", `/m/${slug}/contributions`, undefined, fd);
 assert.equal(r.status, 200, JSON.stringify(r.data));
 step("recorded voice notes with codec parameters are accepted on paid pages");
 
+// Large video in chunks (17 MB -> 3 chunks), as the browser does for anything over 25 MB.
+const big = Buffer.alloc(17 * 1024 * 1024, 7);
+r = await guest.req("POST", `/m/${slug}/uploads`, { size: big.length, type: "video/mp4" });
+assert.equal(r.status, 200, JSON.stringify(r.data));
+const up = r.data;
+for (let i = 0; i < up.chunks; i++) {
+  const part = big.subarray(i * up.chunkBytes, Math.min(big.length, (i + 1) * up.chunkBytes));
+  const res = await fetch(`${BASE}/api/m/${slug}/uploads/${up.uploadId}/${i}`, { method: "PUT", body: part, headers: { "content-type": "application/octet-stream" } });
+  assert.equal(res.status, 200, await res.text());
+}
+fd = new FormData();
+fd.append("name", "Cousin Mike"); fd.append("text", "The speech from the 60th"); fd.append("uploadId", up.uploadId);
+r = await guest.req("POST", `/m/${slug}/contributions`, undefined, fd);
+assert.equal(r.status, 200, JSON.stringify(r.data));
+const vidId = r.data.id;
+await sister.req("POST", `/memorials/${id}/contributions/${vidId}`, { action: "approve" });
+const vid = await guest.req("GET", `/media/${id}/${vidId}/original`);
+assert.equal(vid.data.byteLength, big.length, "combined video is complete");
+const ranged = await fetch(`${BASE}/api/media/${id}/${vidId}/original`, { headers: { range: "bytes=0-99" } });
+assert.equal(ranged.status, 206);
+step("17 MB video uploads in chunks, combines in Storage, and streams with range requests");
+
 console.log("\nAll smoke checks passed.");
