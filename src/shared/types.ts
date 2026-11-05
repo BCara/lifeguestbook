@@ -101,6 +101,12 @@ export interface Me {
 
 export const RELATIONS = ["Family", "Friend", "School", "University", "Work", "Neighbour", "Community", "Other"] as const;
 
+export function lifeYears(born?: string, died?: string) {
+  const y = (s?: string) => (s ? s.slice(0, 4) : "");
+  if (!born && !died) return "";
+  return `${y(born)}${died ? ` – ${y(died)}` : born ? " –" : ""}`;
+}
+
 export function slugify(name: string) {
   return name
     .toLowerCase()

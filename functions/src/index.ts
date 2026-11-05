@@ -14,6 +14,7 @@ import { guestRoutes, mediaRoutes } from "./routes/guest";
 import { hostRoutes, inviteRoutes } from "./routes/host";
 import { legacyRoutes } from "./routes/legacy";
 import { wallRoutes } from "./routes/wall";
+import { shareApp, shareImage } from "./share";
 import { uploadRoutes } from "./routes/uploads";
 
 process.setSourceMapsEnabled(true);
@@ -59,6 +60,11 @@ app.onError((err, c) => {
 app.post("/stripe/webhook", (c) => stripeWebhook(c.env, c.req.raw));
 app.use("*", loadSession);
 app.get("/health", (c) => c.json({ ok: true }));
+app.get("/og/:file", async (c) => {
+  const img = await shareImage(c.req.param("file").replace(/\.jpg$/, ""));
+  if (!img) return c.notFound();
+  return new Response(new Uint8Array(img), { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" } });
+});
 app.get("/me", (c) => {
   const u = c.get("user");
   return c.json({ user: u ? { uid: u.uid, email: u.email, name: u.name } : null, dev: isDev() });
@@ -96,6 +102,12 @@ app.post("/dev/run-jobs", async (c) => {
 export const api = onRequest(
   { region: "us-central1", secrets: SECRETS, memory: "1GiB", timeoutSeconds: 300, concurrency: 40 },
   getRequestListener((req) => app.fetch(req, envFor())),
+);
+
+/** Serves /m/** with link-preview tags (see share.ts). */
+export const share = onRequest(
+  { region: "us-central1", memory: "256MiB", concurrency: 80 },
+  getRequestListener((req) => shareApp.fetch(req, envFor())),
 );
 
 export const notificationDigest = onSchedule(
