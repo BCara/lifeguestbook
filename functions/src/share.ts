@@ -28,10 +28,11 @@ export function injectMeta(html: string, tags: Record<string, string>, title: st
 }
 
 export const shareApp = new Hono<{ Bindings: Env }>().get("/m/:slug/:rest{.*}?", async (c) => {
+  c.header("Cache-Control", "private, no-store");
   const slug = c.req.param("slug");
   const adding = c.req.path.endsWith("/add");
   const [html, m] = await Promise.all([appShell(c.env), memorialBySlug(slug)]);
-  if (!m || m.privacy === "private") {
+  if (!m || m.privacy !== "public") {
     return c.html(injectMeta(html, { "og:title": "Life Guestbook", "og:description": "A private memorial page.", "og:site_name": "Life Guestbook" }, "Life Guestbook", "noindex"));
   }
   const first = m.name.split(" ")[0];
@@ -54,14 +55,13 @@ export const shareApp = new Hono<{ Bindings: Env }>().get("/m/:slug/:rest{.*}?",
     "og:image:alt": `Photo of ${m.name}`,
     "twitter:card": "summary_large_image",
   };
-  c.header("Cache-Control", "public, max-age=300, s-maxage=300");
   return c.html(injectMeta(html, tags, title, m.privacy === "public" ? "index" : "noindex"));
 });
 
 /** 1200×630 share card: their cover photo, or a calm branded card if there isn't one. */
 export async function shareImage(slug: string): Promise<Buffer | null> {
   const m = await memorialBySlug(slug);
-  if (!m || m.privacy === "private") return null;
+  if (!m || m.privacy !== "public") return null;
   if (m.coverPath) {
     const [buf] = await bucket().file(m.coverPath).download();
     // Blurred photo as the backdrop, the photo itself centred at full height: works for portraits too.

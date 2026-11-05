@@ -12,7 +12,7 @@ export const wallRoutes = new Hono<AppEnv>().get("/", async (c) => {
   const w = await walls().doc(sha256(key)).get();
   const mid = (w.data() as { memorialId: string } | undefined)?.memorialId;
   const m = mid ? await getMemorial(mid) : null;
-  if (!m || !mid) return c.json({ error: "This slideshow link isn't valid any more." }, 404);
+  if (!m || !mid || !key || m.wallKey !== key) return c.json({ error: "This slideshow link isn't valid any more." }, 404);
   if (!allowance(m.plan).slideshow) return c.json({ error: "The live slideshow is part of the upgraded page.", name: m.name, locked: true }, 402);
   const snap = await contributions(mid).where("status", "==", "approved").orderBy("createdAt", "desc").limit(400).get();
   const items = snap.docs.filter((d) => !(d.data() as ContributionDoc).sealed).map((d) => {

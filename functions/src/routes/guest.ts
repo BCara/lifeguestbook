@@ -29,7 +29,7 @@ export const guestRoutes = new Hono<AppEnv>()
     const m = await memorialBySlug(c.req.param("slug"));
     if (!m) return c.json({ error: "Not found" }, 404);
     const role = await roleOf(m.id, c.get("uid"));
-    if (m.privacy === "private" && !role) return c.json({ error: "This page is private.", private: true, name: m.name }, 403);
+    if (m.privacy === "private" && !role) return c.json({ error: "Not found" }, 404);
     const [snap, ch] = await Promise.all([
       contributions(m.id).where("status", "==", "approved").orderBy("createdAt", "desc").limit(500).get(),
       memorials().doc(m.id).collection("chapters").orderBy("order").get(),
@@ -48,7 +48,7 @@ export const guestRoutes = new Hono<AppEnv>()
     if (!m) return c.json({ error: "Not found" }, 404);
     const uid = c.get("uid");
     const role = await roleOf(m.id, uid);
-    if (m.privacy === "private" && !role) return c.json({ error: "This page is private." }, 403);
+    if (m.privacy === "private" && !role) return c.json({ error: "Not found" }, 404);
     const allow = allowance(m.plan);
     if (!allow.acceptingContributions) return c.json({ error: "This page isn't taking new memories at the moment." }, 403);
     if (allow.contributionLimit != null && m.counts.total >= allow.contributionLimit)
@@ -135,6 +135,7 @@ export const guestRoutes = new Hono<AppEnv>()
   .post("/:slug/contributions/:cid/report", async (c) => {
     const m = await memorialBySlug(c.req.param("slug"));
     if (!m) return c.json({ error: "Not found" }, 404);
+    if (m.privacy === "private" && !await roleOf(m.id, c.get("uid"))) return c.json({ error: "Not found" }, 404);
     const ip = clientIp(c.req.raw.headers);
     // Bounded reporting (DigiStayBook decideReport): a few reports per person, and a circuit breaker per page.
     if ((await overLimit(`report:${ip}`, 5, 24 * 3600_000)) || (await overLimit(`report-page:${m.id}`, 10)))
@@ -178,7 +179,7 @@ export const mediaRoutes = new Hono<AppEnv>().get("/:mid/:cid/:variant", async (
   if (!meta) return c.notFound();
   const size = Number(meta.size);
   const type = String(meta.contentType ?? "application/octet-stream");
-  const cache = m.privacy === "private" ? "private, max-age=3600" : "public, max-age=86400";
+  const cache = "private, no-store";
   // Range support so videos and audio can seek on iPhone.
   const range = c.req.header("range");
   if (range) {

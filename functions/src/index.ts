@@ -58,12 +58,16 @@ app.onError((err, c) => {
 });
 
 app.post("/stripe/webhook", (c) => stripeWebhook(c.env, c.req.raw));
+app.use("*", async (c, next) => {
+  c.header("Cache-Control", "private, no-store");
+  await next();
+});
 app.use("*", loadSession);
 app.get("/health", (c) => c.json({ ok: true }));
 app.get("/og/:file", async (c) => {
   const img = await shareImage(c.req.param("file").replace(/\.jpg$/, ""));
   if (!img) return c.notFound();
-  return new Response(new Uint8Array(img), { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" } });
+  return new Response(new Uint8Array(img), { headers: { "Content-Type": "image/jpeg", "Cache-Control": "private, no-store" } });
 });
 app.get("/me", (c) => {
   const u = c.get("user");

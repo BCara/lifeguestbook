@@ -23,7 +23,7 @@ export const uploadRoutes = new Hono<AppEnv>()
     const m = await memorialBySlug(c.req.param("slug"));
     if (!m) return c.json({ error: "Not found" }, 404);
     const role = await roleOf(m.id, c.get("uid"));
-    if (m.privacy === "private" && !role) return c.json({ error: "This page is private." }, 403);
+    if (m.privacy === "private" && !role) return c.json({ error: "Not found" }, 404);
     const allow = allowance(m.plan);
     if (!allow.acceptingContributions) return c.json({ error: "This page isn't taking new memories at the moment." }, 403);
     const b = (await c.req.json().catch(() => ({}))) as { size?: number; type?: string };

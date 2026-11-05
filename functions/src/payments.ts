@@ -1,5 +1,5 @@
 // Stripe Checkout. One-off: Tribute and Forever. Subscriptions: yearly hosting and Living Legacy.
-// Without a Stripe key (local dev) purchases apply instantly at no charge.
+// Instant purchases are confined to demo projects backed by the Firestore emulator.
 import { Hono } from "hono";
 import Stripe from "stripe";
 import { CURRENCIES, formatPrice, PRICES, PRODUCT_NAMES, RECURRING, type Currency, type Product } from "../../src/shared/pricing";
@@ -8,7 +8,7 @@ import { can } from "../../src/shared/roles";
 import { requireUser, type AppEnv } from "./auth";
 import { db, getMemorial, logAudit, memorials, users, type UserDoc } from "./db";
 import { receiptEmail, sendEmail } from "./email";
-import { paymentsEnabled, type Env } from "./env";
+import { demoPurchasesEnabled, paymentsEnabled, type Env } from "./env";
 import { roleOf } from "./db";
 
 const PRODUCTS: Product[] = ["tribute", "forever", "hosting", "living"];
@@ -43,6 +43,7 @@ export const paymentRoutes = new Hono<AppEnv>()
     const m = (await getMemorial(b.memorialId))!;
     if (m.plan.tier === "forever") return c.json({ error: "This page already has Forever hosting." }, 400);
     if (!paymentsEnabled(c.env)) {
+      if (!demoPurchasesEnabled()) return c.json({ error: "Payments are currently unavailable." }, 503);
       await applyPurchase(c.env, b.memorialId, product, uid, `dev-${Date.now()}`, `${formatPrice(product, currency)} (test, no charge)`);
       return c.json({ applied: true });
     }
@@ -70,7 +71,8 @@ export const paymentRoutes = new Hono<AppEnv>()
   .post("/confirm", requireUser, async (c) => {
     // Called when the payer returns from Checkout, so the upgrade shows without waiting for the webhook.
     const b = (await c.req.json().catch(() => ({}))) as { sessionId?: string };
-    if (!paymentsEnabled(c.env) || !b.sessionId) return c.json({ ok: true });
+    if (!paymentsEnabled(c.env)) return c.json({ error: "Payments are currently unavailable." }, 503);
+    if (!b.sessionId) return c.json({ error: "Bad request" }, 400);
     const stripe = new Stripe(c.env.STRIPE_SECRET_KEY);
     const s = await stripe.checkout.sessions.retrieve(b.sessionId);
     if (s.payment_status === "paid" && s.metadata?.memorialId) {
