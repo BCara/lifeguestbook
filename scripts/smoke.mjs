@@ -237,14 +237,16 @@ assert.equal(ranged.status, 206);
 step("17 MB video uploads in chunks, combines in Storage, and streams with range requests");
 
 // ---------------------------------------------------------------- recovery and anniversaries
-const FS = "http://127.0.0.1:8080/v1/projects/demo-lifeguestbook/databases/(default)/documents";
+const firestoreHost = process.env.FIRESTORE_EMULATOR_HOST ?? "127.0.0.1:8080";
+const FS = `http://${firestoreHost}/v1/projects/demo-lifeguestbook/databases/(default)/documents`;
 const fsPatch = (path, fields) => fetch(`${FS}/${path}?${Object.keys(fields).map((k) => `updateMask.fieldPaths=${k}`).join("&")}`, {
   method: "PATCH", headers: { Authorization: "Bearer owner", "content-type": "application/json" },
   body: JSON.stringify({ fields: Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, typeof v === "number" ? { integerValue: String(v) } : { stringValue: v }])) }),
 });
 // Arthur's page (now a memorial) is owned by `owner`, with sister as admin. The owner goes quiet.
 const ownerUid = (await owner.req("GET", "/me")).data.user.uid;
-await fsPatch(`users/${ownerUid}`, { lastSeenAt: Date.now() - 120 * 86400_000 });
+const fixture = await fsPatch(`users/${ownerUid}`, { lastSeenAt: Date.now() - 120 * 86400_000 });
+assert.ok(fixture.ok, `Recovery fixture update failed (HTTP ${fixture.status})`);
 r = await sister.req("GET", `/memorials/${live.id}`);
 assert.ok(r.data.ownerInactiveDays >= 119);
 r = await sister.req("POST", `/memorials/${live.id}/recovery`);
