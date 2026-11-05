@@ -17,7 +17,7 @@ export function Home() {
           <p className="lead">
             Share one link or QR code. Friends, old colleagues and family everywhere add the photos and stories you've never seen. On the day, they appear on a live slideshow. Several family members look after the page together, so it's never locked to one person's email.
           </p>
-          <div className="row gap">
+          <div className="row gap wrap">
             <Link to="/new" className="btn">Create a free page</Link>
             <Link to="/new?mode=living" className="btn secondary">Start a Living Legacy</Link>
           </div>
