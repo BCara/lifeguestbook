@@ -1,0 +1,58 @@
+// Daily jobs: renewal reminders (30 days, 7 days, lapsed), the day-before checklist and the recap
+// the day after the service.
+import { adminEmails, contributions, memorials, type ContributionDoc, type MemorialDoc } from "./db";
+import { dayBeforeEmail, recapEmail, renewalEmail, sendEmail } from "./email";
+import type { Env } from "./env";
+
+const DAY = 24 * 3600_000;
+const ymd = (t: number) => new Date(t).toISOString().slice(0, 10);
+
+export async function runDailyJobs(env: Env, now = Date.now()) {
+  let sent = 0;
+  const today = ymd(now);
+  const tomorrow = ymd(now + DAY);
+  const yesterday = ymd(now - DAY);
+
+  // Renewals: only plans with an end date.
+  const renewals = await memorials().where("plan.hostingUntil", "<=", now + 31 * DAY).get();
+  for (const d of renewals.docs) {
+    const m = d.data() as MemorialDoc;
+    if (m.plan.hostingUntil == null) continue;
+    const days = Math.ceil((m.plan.hostingUntil - now) / DAY);
+    const stage = days <= 0 ? "lapsed" : days <= 7 ? "7" : days <= 30 ? "30" : null;
+    if (!stage || m.reminders?.[stage]) continue;
+    for (const a of await adminEmails(d.id, ["owner", "admin"])) {
+      await sendEmail(env, renewalEmail(a.email, m.name, days, `${env.APP_ORIGIN}/dashboard/${d.id}?tab=plan`));
+      sent++;
+    }
+    await d.ref.update({ [`reminders.${stage}`]: now });
+  }
+
+  // Day before the service.
+  const tomorrowServices = await memorials().where("service.date", "==", tomorrow).get();
+  for (const d of tomorrowServices.docs) {
+    const m = d.data() as MemorialDoc;
+    if (m.dayBeforeSentAt) continue;
+    for (const a of await adminEmails(d.id)) {
+      await sendEmail(env, dayBeforeEmail(a.email, m.name, `${env.APP_ORIGIN}/wall?k=${m.wallKey}`, `${env.APP_ORIGIN}/dashboard/${d.id}`));
+      sent++;
+    }
+    await d.ref.update({ dayBeforeSentAt: now, notifyMode: "instant" });
+  }
+
+  // Recap the day after the service (and switch back to digest mode).
+  const recapDue = await memorials().where("service.date", "in", [yesterday, today === yesterday ? today : yesterday]).get();
+  for (const d of recapDue.docs) {
+    const m = d.data() as MemorialDoc;
+    if (m.recapSentAt || m.service?.date !== yesterday) continue;
+    const snap = await contributions(d.id).where("status", "==", "approved").get();
+    if (snap.empty) continue;
+    const people = new Set(snap.docs.map((c) => (c.data() as ContributionDoc).authorName.toLowerCase())).size;
+    for (const a of await adminEmails(d.id)) {
+      await sendEmail(env, recapEmail(a.email, m.name, snap.size, people, `${env.APP_ORIGIN}/m/${m.slug}`));
+      sent++;
+    }
+    await d.ref.update({ recapSentAt: now, notifyMode: "digest" });
+  }
+  return sent;
+}
