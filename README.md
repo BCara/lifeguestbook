@@ -46,33 +46,33 @@ Firestore and Storage rules deny all browser access. Every read and write goes t
 
 ## Run it locally
 
-Requires Node 22+ and Java 11+ (for the emulators).
+Use Node 22 (the patch version is in `.node-version`) and a Java 21 JDK for the Firebase emulators. On Windows, install the pinned Node version and a Java 21 JDK, then reopen PowerShell. Verify that `node --version` matches `.node-version` and `java -version` reports 21. If PowerShell blocks the npm wrapper, use `npm.cmd` in place of `npm` in the commands below.
 
-```bash
-npm install --legacy-peer-deps
+From the repository root, install dependencies from both lockfiles.
+
+```sh
+npm ci
+npm ci --prefix functions
 ```
 
-```bash
+```sh
 npm run dev
 ```
 
-Open http://localhost:5173 (Vite proxies `/api` straight to the Functions emulator). Sign-in links, invitation links and every email show on screen or in the functions log; nothing is really sent. Without Stripe keys, upgrades apply instantly at no charge. Type `[review]` or `[safety]` in a memory to simulate screening flags. `POST /api/dev/run-jobs` runs the digest and daily jobs immediately.
+Open http://localhost:5173. Vite proxies `/api` to the Functions emulator. The emulator scripts target `demo-lifeguestbook` and create ignored local settings on first run. `npm run setup:emulators` prepares the same settings for a manual emulator start after `npm run build`. The defaults use dummy provider secrets and disable cloud screening. Set `APP_ORIGIN` in `functions/.env.local` if you serve Vite at a different origin.
 
-Checks:
+Sign-in and invitation links appear on screen or in the functions log. With the dummy Stripe keys, upgrades apply instantly at no charge. Type `[review]` or `[safety]` in a memory to simulate screening flags. `POST /api/dev/run-jobs` runs the digest and daily jobs immediately.
 
-```bash
+Run the same baseline commands as CI. Stop the dev emulators before running the smoke test so its emulator ports are available.
+
+```sh
 npm run typecheck
-```
-
-```bash
 npm test
-```
-
-```bash
+npm run build
 npm run test:smoke
 ```
 
-`npm test` runs the unit tests. `npm run test:smoke` is an end-to-end run on the emulators: sign-in, create, invite, guest upload, screening, approval, report, upgrade, slideshow, ownership transfer, digest and download.
+The smoke test exercises sign-in, creation, invites, guest uploads, screening, approval, reports, upgrades, slideshow, ownership transfer, digests and downloads on the emulators.
 
 ## Going live (one-time setup)
 
