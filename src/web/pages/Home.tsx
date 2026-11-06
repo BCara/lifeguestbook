@@ -7,11 +7,7 @@ import { Link } from "../router";
 import { useSession } from "../session";
 import "./Home.css";
 
-const products = [
-  { id: "living-legacy", title: "Living Legacy", line: "Record their story together.", art: "474 378 330 300", icon: "book", to: "/new?mode=living", action: "Start a Living Legacy", detail: "Choose favourite photos and record their stories in their own words. Invite family to help build a timeline together." },
-  { id: "memories-from-afar", title: "Memories from Afar", line: "Collect photos and stories through one link.", art: "819 378 333 300", icon: "photo", to: "/new", action: "Create a page to share", detail: "Share your page in a Facebook announcement, group chat or email. Review incoming photos and stories with family before the service." },
-  { id: "day-of-guestbook", title: "Day-of Guestbook & Live Slideshow", line: "Scan, contribute, and see memories on screen.", art: "1169 378 346 302", icon: "screen", to: "/new", action: "Create a memorial guestbook", detail: "Put a QR code at the service so guests can share without an app or account. Choose what appears on the venue screen with the live slideshow, included in Tribute." },
-] as const;
+import { products } from "./home-products";
 
 const iconPaths = {
   book: "M3 5c4-1 7 0 9 2 2-2 5-3 9-2v14c-4-1-7 0-9 2-2-2-5-3-9-2z M12 7v14",
@@ -19,7 +15,7 @@ const iconPaths = {
   screen: "M2 4h20v13H2z M8 21h8 M12 17v4 M10 8l5 3-5 3z",
 };
 
-function ProductArt({ viewBox, className }: { viewBox: string; className: string }) {
+export function ProductArt({ viewBox, className }: { viewBox: string; className: string }) {
   // The approved reference supplies the photo regions. Titles and controls are rendered separately.
   return (
     <svg className={className} viewBox={viewBox} preserveAspectRatio="xMidYMid slice" aria-hidden="true">
@@ -28,7 +24,7 @@ function ProductArt({ viewBox, className }: { viewBox: string; className: string
   );
 }
 
-function HomeHeader() {
+export function HomeHeader() {
   const { me } = useSession();
   const [open, setOpen] = useState(false);
   return (
@@ -44,11 +40,11 @@ function HomeHeader() {
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 5h20M2 12h20M2 19h20" /></svg>
       </button>
       <nav id="home-nav" className={open ? "home-nav is-open" : "home-nav"} aria-label="Main navigation" onClick={() => setOpen(false)}>
-        <a href="#how-it-works">How it Works</a>
-        <a href="#products">Products</a>
-        <a href="#examples">Examples</a>
+        <a href="/#how-it-works">How it works</a>
+        <a href="/#products">Ways to use it</a>
+        <a href="/#our-family">Our family business</a>
         <Link to={me ? "/dashboard" : "/signin"}>{me ? "Your pages" : "Sign in"}</Link>
-        <Link to="/new" className="home-start">Get Started</Link>
+        <Link to="/new" className="home-start">Create a page</Link>
       </nav>
     </header>
   );
@@ -64,14 +60,15 @@ export function Home() {
       <main className="home-main">
         <section className="home-hero">
           <ProductArt className="home-hero-art" viewBox="995 146 539 223" />
-          <h1>Gather a life’s stories<br className="home-heading-break" /> in three simple ways</h1>
+          <h1>A place for the stories<br className="home-heading-break" /> you want to keep</h1>
+          <p className="home-hero-intro">Tell your own story, help someone tell theirs, or gather memories of someone you love.</p>
           <svg className="home-underline" viewBox="0 0 175 18" aria-hidden="true">
             <path d="M4 15C56 3 121 0 171 7" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
           </svg>
         </section>
         <section className="home-products" id="products" aria-label="Three ways to use LifeGuestbook">
           {products.map(({ id, title, line, art, icon }) => (
-            <a key={id} href={`#${id}`} className={`home-product home-product-${icon}`}>
+            <a key={id} href={`/${id}`} className={`home-product home-product-${icon}`}>
               <ProductArt className="home-card-art" viewBox={art} />
               <div className="home-card-copy">
                 <span className="home-card-icon">
@@ -89,17 +86,10 @@ export function Home() {
           <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d={iconPaths.photo} /></svg>Preserve meaningful memories</span>
           <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d={iconPaths.screen} /></svg>Share at the service and beyond</span>
         </section>
-        <section className="home-examples" id="examples">
-          <h2>Find the right fit</h2>
-          <div className="home-examples-grid">
-            {products.map(({ id, title, detail, action, to }) => (
-              <article key={id} id={id}>
-                <h3>{title}</h3>
-                <p>{detail}</p>
-                <Link to={to} className="home-start">{action}</Link>
-              </article>
-            ))}
-          </div>
+        <section className="home-family" id="our-family">
+          <p className="home-family-label">LifeGuestbook · A family business</p>
+          <h2>Made for families, by a family</h2>
+          <p>We built LifeGuestbook to give families an easy place to gather photographs and stories. Some are told around the kitchen table. Others come from people you haven’t heard from in years. You can start with one memory and take it at your own pace.</p>
         </section>
 
 

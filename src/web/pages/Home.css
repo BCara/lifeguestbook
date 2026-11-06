@@ -52,3 +52,24 @@
 }
 
 .home-benefits span { display: grid; place-items: center; gap: 4px; } .home-benefits svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.home-hero-intro { max-width: 35ch; margin: 12px 0 0; color: #36463c; line-height: 1.45; }
+.home-family, .product-family { background: #f0ebe1; border-radius: 16px; }
+.home-family { margin: 26px 12px; padding: clamp(20px, 4vw, 40px); }
+.home-family-label { margin: 0 0 8px; font-size: .85rem; font-weight: 650; color: #4c614e; }
+.home-family h2, .product-steps h2 { margin-bottom: 8px; }
+.home-family > p:last-child { max-width: 60ch; margin: 0; }
+.product-landing { max-width: 1040px; padding: 22px 18px 44px; }
+.product-back { display: inline-block; margin-bottom: 18px; }
+.product-intro { display: grid; align-items: center; gap: 22px; }
+.product-intro h1 { font: bold clamp(2rem, 6vw, 3.5rem)/1.08 Georgia, serif; letter-spacing: -.035em; }
+.product-intro p:not(.home-family-label) { max-width: 53ch; margin: 0 0 18px; }
+.product-landing-art { width: 100%; aspect-ratio: 4 / 3; border-radius: 18px; overflow: hidden; }
+.product-steps { display: grid; gap: 18px; margin-top: 28px; }
+.product-steps section { border-top: 1px solid #d8cec2; padding-top: 15px; }
+.product-steps p { margin: 0; }
+.product-family { margin: 25px 0 0; padding: 16px; }
+@media (min-width: 760px) {
+  .home-family { margin-inline: 2.4%; }
+  .product-intro { grid-template-columns: 1.15fr 1fr; gap: 32px; }
+  .product-steps { grid-template-columns: 1fr 1fr; }
+}

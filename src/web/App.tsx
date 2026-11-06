@@ -1,6 +1,8 @@
 import { AddMemory } from "./pages/AddMemory";
 import { Create } from "./pages/Create";
 import { Dashboard } from "./pages/Dashboard";
+import { ProductPage } from "./pages/ProductPage";
+import { products } from "./pages/home-products";
 import { Home } from "./pages/Home";
 import { Invite } from "./pages/Invite";
 import { Manage } from "./pages/Manage";
@@ -16,6 +18,8 @@ export function App() {
   const { path } = useLocation();
   let match: RegExpMatchArray | null;
   if (path === "/" || path === "") return <Home />;
+  const product = products.find(({ id }) => path === `/${id}` || path === `/${id}/`);
+  if (product) return <ProductPage product={product} />;
   if (path === "/signin") return <SignIn />;
   if (path === "/dashboard") return <Dashboard />;
   if (path === "/new") return <Create />;
