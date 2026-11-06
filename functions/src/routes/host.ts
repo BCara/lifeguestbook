@@ -12,6 +12,7 @@ import {
   bucket,
   contributions,
   diedMD,
+  db,
   getMemorial,
   invites,
   isSealed,
@@ -416,15 +417,28 @@ export const inviteRoutes = new Hono<AppEnv>()
   })
   .post("/:token/accept", requireUser, async (c) => {
     const ref = invites().doc(sha256(c.req.param("token")));
-    const inv = (await ref.get()).data() as InviteDoc | undefined;
-    if (!inv || inv.expiresAt < Date.now() || inv.acceptedBy) return c.json({ error: "This invitation has expired or was already used." }, 404);
     const uid = c.get("uid")!;
     const user = c.get("user")!;
-    const existing = await roleOf(inv.memorialId, uid);
-    if (!existing || existing === "trusted" || (existing === "moderator" && inv.role === "admin")) {
-      await addMember(inv.memorialId, uid, user.email, inv.role, inv.invitedBy, user.name);
-    }
-    await ref.update({ acceptedBy: uid });
+    const result = await db.runTransaction(async (transaction) => {
+      const inv = (await transaction.get(ref)).data() as InviteDoc | undefined;
+      if (!inv || inv.expiresAt < Date.now() || inv.acceptedBy) return { status: "expired" } as const;
+      if (inv.email.trim().toLowerCase() !== user.email.trim().toLowerCase()) return { status: "wrong_email" } as const;
+      const memorial = await transaction.get(memorials().doc(inv.memorialId));
+      if (!memorial.exists) return { status: "expired" } as const;
+      const memberRef = members(inv.memorialId).doc(uid);
+      const member = (await transaction.get(memberRef)).data() as MemberDoc | undefined;
+      const existing = memorial.get("ownerId") === uid ? "owner" : member?.role;
+      if (!existing || existing === "trusted" || (existing === "moderator" && inv.role === "admin")) {
+        const addedAt = Date.now();
+        transaction.set(memberRef, { role: inv.role, email: user.email, addedAt, addedBy: inv.invitedBy, ...(user.name ? { name: user.name } : {}) });
+        transaction.set(memberships(uid).doc(inv.memorialId), { role: inv.role, addedAt });
+      }
+      transaction.update(ref, { acceptedBy: uid });
+      return { status: "accepted", inv } as const;
+    });
+    if (result.status === "expired") return c.json({ error: "This invitation has expired or was already used." }, 404);
+    if (result.status === "wrong_email") return c.json({ error: "Sign in with the email address this invitation was sent to." }, 403);
+    const { inv } = result;
     await logAudit(inv.memorialId, uid, "joined", undefined, inv.role);
     return c.json({ memorialId: inv.memorialId });
   });

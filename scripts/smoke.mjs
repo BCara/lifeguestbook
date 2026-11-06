@@ -28,6 +28,8 @@ class Client {
     const token = new URL(r.data.devLink).searchParams.get("t");
     const v = await this.req("GET", `/auth/verify?t=${token}`);
     assert.equal(v.status, 302);
+    const replay = await new Client().req("GET", `/auth/verify?t=${token}`);
+    assert.equal(replay.headers.get("location"), "/signin?expired=1");
     const me = await this.req("GET", "/me");
     assert.equal(me.data.user.email, email);
   }
@@ -66,6 +68,9 @@ r = await owner.req("GET", "/dev/emails");
 const inviteMail = r.data.emails.find((e) => e.to === SISTER);
 assert.ok(inviteMail, "invite email logged");
 const inviteToken = inviteMail.text.match(/invite\?t=([\w-]+)/)[1];
+const wrongAccount = new Client();
+await wrongAccount.signIn(`wrong-${RUN}@example.test`);
+assert.equal((await wrongAccount.req("POST", `/invites/${inviteToken}/accept`)).status, 403);
 await sister.signIn(SISTER);
 r = await sister.req("POST", `/invites/${inviteToken}/accept`);
 assert.equal(r.status, 200, JSON.stringify(r.data));

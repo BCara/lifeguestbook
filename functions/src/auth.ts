@@ -4,7 +4,7 @@
 import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { randomToken, sha256 } from "./crypto";
-import { sessions, signInTokens, users, type UserDoc } from "./db";
+import { db, sessions, signInTokens, users, type UserDoc } from "./db";
 import { sendEmail, signInEmail } from "./email";
 import { isDev, type Env } from "./env";
 import { clientIp, overLimit } from "./limits";
@@ -17,7 +17,8 @@ const COOKIE = "__session";
 
 export const userIdFor = (email: string) => sha256(email.trim().toLowerCase()).slice(0, 28);
 export const validEmail = (e: unknown): e is string => typeof e === "string" && e.length <= 200 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
-const safeNext = (n: unknown) => (typeof n === "string" && n.startsWith("/") && !n.startsWith("//") ? n : "/dashboard");
+const safeNext = (n: unknown) =>
+  typeof n === "string" && n.startsWith("/") && !n.startsWith("//") && !/[\\\u0000-\u001f\u007f]/.test(n) ? n : "/dashboard";
 
 /** Loads the signed-in user, if any. Never rejects. */
 export const loadSession: MiddlewareHandler<AppEnv> = async (c, next) => {
@@ -76,13 +77,17 @@ export const authRoutes = new Hono<AppEnv>()
   .get("/verify", async (c) => {
     const token = c.req.query("t") ?? "";
     const ref = signInTokens().doc(sha256(token));
-    const snap = await ref.get();
-    const data = snap.data() as { email: string; name?: string; next: string; expiresAt: number } | undefined;
-    if (!data || data.expiresAt < Date.now()) return c.redirect("/signin?expired=1");
-    await ref.delete();
+    const data = await db.runTransaction(async (transaction) => {
+      const snap = await transaction.get(ref);
+      const entry = snap.data() as { email: string; name?: string; next: string; expiresAt: number } | undefined;
+      if (!entry || entry.expiresAt < Date.now()) return null;
+      transaction.delete(ref);
+      return entry;
+    });
+    if (!data) return c.redirect("/signin?expired=1");
     const uid = await ensureUser(data.email, data.name ?? undefined);
     await startSession(c, uid);
-    return c.redirect(data.next || "/dashboard");
+    return c.redirect(safeNext(data.next));
   })
   .post("/signout", async (c) => {
     const token = getCookie(c, COOKIE);
