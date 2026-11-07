@@ -23,15 +23,35 @@ export function seedChapters(mid: string, transaction: FirebaseFirestore.Transac
   DEFAULT_CHAPTERS.forEach((title, i) => transaction.set(chapters(mid).doc(), { title, order: i, createdAt: Date.now() } satisfies ChapterDoc));
 }
 
-/** Free pages get a taste of the writing help; paid pages get plenty. */
-async function aiAllowed(mid: string, m: MemorialDoc) {
-  if (isPaid(m.plan)) return !(await overLimit(`ai:${mid}`, 40, 24 * 3600_000));
-  return (m.aiUses ?? 0) < 3;
-}
-async function countAiUse(mid: string) {
+export const FREE_AI_USES = 3;
+const AI_USER_DAILY = 30;
+
+/**
+ * Free pages get a taste of the writing help; paid pages get plenty. The free allowance is reserved
+ * atomically before the model is called, so parallel requests can't each pass a stale `aiUses < 3`
+ * check. Each signed-in user also has a daily cap across all their pages (pages are free to create).
+ */
+export async function reserveAiUse(mid: string, m: MemorialDoc, uid: string): Promise<"ok" | "page" | "user"> {
+  if (await overLimit(`ai-user:${uid}`, AI_USER_DAILY, 24 * 3600_000)) return "user";
+  if (isPaid(m.plan)) return (await overLimit(`ai:${mid}`, 40, 24 * 3600_000)) ? "page" : "ok";
+  const ref = memorials().doc(mid);
   const { FieldValue } = await import("firebase-admin/firestore");
-  await memorials().doc(mid).update({ aiUses: FieldValue.increment(1) });
+  const ok = await ref.firestore.runTransaction(async (tx) => {
+    const used = ((await tx.get(ref)).data() as MemorialDoc | undefined)?.aiUses ?? 0;
+    if (used >= FREE_AI_USES) return false;
+    tx.update(ref, { aiUses: FieldValue.increment(1) });
+    return true;
+  });
+  return ok ? "ok" : "page";
 }
+/** Paid pages count usage after success; free pages hand back a reservation that produced nothing. */
+async function settleAiUse(mid: string, m: MemorialDoc, succeeded: boolean) {
+  const { FieldValue } = await import("firebase-admin/firestore");
+  if (isPaid(m.plan) && succeeded) await memorials().doc(mid).update({ aiUses: FieldValue.increment(1) });
+  if (!isPaid(m.plan) && !succeeded) await memorials().doc(mid).update({ aiUses: FieldValue.increment(-1) }).catch(() => undefined);
+}
+const aiLimitMessage = (why: "page" | "user", m: MemorialDoc, what: string) =>
+  why === "user" || isPaid(m.plan) ? `That's a lot of ${what} for one day. Try again tomorrow.` : `The free plan includes ${FREE_AI_USES} uses of the writing help. Upgrade for more.`;
 
 export const legacyRoutes = new Hono<AppEnv>()
   .use("/memorials", requireUser)
@@ -67,7 +87,7 @@ export const legacyRoutes = new Hono<AppEnv>()
     const update: Record<string, unknown> = {};
     if (str(b.title, 80)) update.title = str(b.title, 80);
     if ("era" in b) update.era = str(b.era, 30) ?? null;
-    if (typeof b.order === "number") update.order = b.order;
+    if (typeof b.order === "number" && Number.isInteger(b.order) && b.order >= 0 && b.order < 1000) update.order = b.order;
     await chapters(id).doc(cid).update(update);
     return c.json({ ok: true });
   })
@@ -76,7 +96,8 @@ export const legacyRoutes = new Hono<AppEnv>()
     if (!can(await roleOf(id, c.get("uid")), "manage_settings")) return c.json({ error: "Not allowed" }, 403);
     const b = (await c.req.json().catch(() => ({}))) as { ids?: string[] };
     const batch = memorials().firestore.batch();
-    (b.ids ?? []).slice(0, 100).forEach((cid, i) => batch.update(chapters(id).doc(cid), { order: i }));
+    const ids = Array.isArray(b.ids) ? b.ids.filter((x): x is string => typeof x === "string" && /^[A-Za-z0-9]{1,40}$/.test(x)).slice(0, 100) : [];
+    ids.forEach((cid, i) => batch.update(chapters(id).doc(cid), { order: i }));
     await batch.commit();
     return c.json({ ok: true });
   })
@@ -104,18 +125,20 @@ export const legacyRoutes = new Hono<AppEnv>()
     const { id, cid } = c.req.param();
     if (!can(await roleOf(id, c.get("uid")), "moderate")) return c.json({ error: "Not allowed" }, 403);
     const m = (await getMemorial(id))!;
-    if (!(await aiAllowed(id, m))) return c.json({ error: isPaid(m.plan) ? "That's a lot of suggestions for one day. Try again tomorrow." : "The free plan includes 3 uses of the writing help. Upgrade for more." }, 402);
     const chSnap = await chapters(id).doc(cid).get();
     if (!chSnap.exists) return c.json({ error: "Not found" }, 404);
+    const allowed = await reserveAiUse(id, m, c.get("uid")!);
+    if (allowed !== "ok") return c.json({ error: aiLimitMessage(allowed, m, "suggestions") }, allowed === "user" ? 429 : 402);
     const ch = chSnap.data() as ChapterDoc;
     const told = await contributions(id).where("status", "==", "approved").limit(300).get();
     const toldTexts = told.docs.map((d) => d.data() as ContributionDoc).filter((x) => x.text && !x.sealed).map((x) => `${x.prompt ? `Q: ${x.prompt}\nA: ` : ""}${x.text}`);
     try {
       const questions = await interviewQuestions(c.env, m, ch.title, toldTexts);
       await chSnap.ref.update({ questions });
-      await countAiUse(id);
+      await settleAiUse(id, m, true);
       return c.json({ questions });
     } catch (e) {
+      await settleAiUse(id, m, false);
       if (e instanceof AiRefusal) return c.json({ error: e.message }, 422);
       throw e;
     }
@@ -130,16 +153,18 @@ export const legacyRoutes = new Hono<AppEnv>()
     if (!DRAFT_KINDS.includes(b.kind as DraftKind)) return c.json({ error: "Choose what to write." }, 400);
     const tone: Tone = b.tone === "light" || b.tone === "formal" ? b.tone : "warm";
     const m = (await getMemorial(id))!;
-    if (!(await aiAllowed(id, m))) return c.json({ error: isPaid(m.plan) ? "That's a lot of drafts for one day. Try again tomorrow." : "The free plan includes 3 uses of the writing help. Upgrade for more." }, 402);
+    const allowed = await reserveAiUse(id, m, uid);
+    if (allowed !== "ok") return c.json({ error: aiLimitMessage(allowed, m, "drafts") }, allowed === "user" ? 429 : 402);
     const snap = await contributions(id).where("status", "==", "approved").orderBy("createdAt", "asc").limit(1500).get();
     const memories = snap.docs.map((d) => d.data() as ContributionDoc).filter((x) => !x.sealed);
     try {
       const text = await draftWriting(c.env, m, memories, { kind: b.kind as DraftKind, tone, notes: str(b.notes, 6000), speaker: str(b.speaker, 120) });
       const ref = await drafts(id).add({ kind: b.kind, tone, text, createdBy: uid, createdAt: Date.now(), memoryCount: memories.length });
-      await countAiUse(id);
+      await settleAiUse(id, m, true);
       await logAudit(id, uid, "ai_draft", undefined, b.kind);
       return c.json({ id: ref.id, text, memoryCount: memories.length });
     } catch (e) {
+      await settleAiUse(id, m, false);
       if (e instanceof AiRefusal) return c.json({ error: e.message }, 422);
       throw e;
     }

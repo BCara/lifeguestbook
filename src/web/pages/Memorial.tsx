@@ -45,7 +45,7 @@ export function MemorialPage({ slug }: { slug: string }) {
             <h3>{m.mode === "memorial" ? "The service" : "Celebration"}</h3>
             <p>{s.date && new Date(s.date).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}{s.time && ` at ${s.time}`}</p>
             {s.place && <p>{s.place}</p>}
-            {s.livestreamUrl && <p><a href={s.livestreamUrl} target="_blank" rel="noreferrer">Watch the livestream</a></p>}
+            {s.livestreamUrl && /^https?:\/\//i.test(s.livestreamUrl) && <p><a href={s.livestreamUrl} target="_blank" rel="noreferrer">Watch the livestream</a></p>}
           </section>
         )}
         {m.story && (

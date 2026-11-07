@@ -4,7 +4,7 @@ import { onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { Hono } from "hono";
 import { authRoutes, loadSession, type AppEnv } from "./auth";
-import { hmac } from "./crypto";
+import { hmac, timingSafeEqualStr } from "./crypto";
 import { db, users } from "./db";
 import { isDev, type Env } from "./env";
 import { runDailyJobs } from "./jobs";
@@ -17,6 +17,7 @@ import { legacyRoutes } from "./routes/legacy";
 import { wallRoutes } from "./routes/wall";
 import { shareApp, shareImage } from "./share";
 import { uploadRoutes } from "./routes/uploads";
+import { apiSecurityHeaders, noEncodedSeparators, sameOriginOnly } from "./security";
 
 process.setSourceMapsEnabled(true);
 
@@ -58,7 +59,10 @@ app.onError((err, c) => {
   return c.json({ error: "Something went wrong on our side. Please try again." }, 500);
 });
 
+app.use("*", apiSecurityHeaders);
 app.post("/stripe/webhook", (c) => stripeWebhook(c.env, c.req.raw));
+app.use("*", noEncodedSeparators);
+app.use("*", sameOriginOnly);
 app.use("*", async (c, next) => {
   c.header("Cache-Control", "private, no-store");
   await next();
@@ -86,7 +90,9 @@ app.route("/", hostRoutes);
 
 app.get("/email/unsubscribe", async (c) => {
   const uid = c.req.query("u") ?? "";
-  if (c.req.query("s") !== hmac(c.env.RESEND_API_KEY || "dev", uid)) return c.text("This link isn't valid.", 400);
+  // Without a real key the signature would be computable by anyone, so only dev may fall back.
+  const key = c.env.RESEND_API_KEY && c.env.RESEND_API_KEY !== "none" ? c.env.RESEND_API_KEY : isDev() ? "dev" : "";
+  if (!key || !/^[a-f0-9]{28}$/.test(uid) || !timingSafeEqualStr(c.req.query("s") ?? "", hmac(key, uid))) return c.text("This link isn't valid.", 400);
   await users().doc(uid).update({ emailOptOut: true }).catch(() => undefined);
   return c.html("<p style='font-family:sans-serif;padding:24px'>You won't get these update emails any more.</p>");
 });

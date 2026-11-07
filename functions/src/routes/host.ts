@@ -33,6 +33,7 @@ import { approvedEmail, inviteEmail, pageReadyEmail, sendEmail, transferEmail } 
 import { demoPurchasesEnabled, isDev, paymentsEnabled } from "../env";
 import { overLimit } from "../limits";
 import { storeImage } from "../media";
+import { safeHttpUrl } from "../security";
 import { adminView, contributionView } from "../views";
 import { seedChapters } from "./legacy";
 import { deliverGuestbookEmails, guestbookEmail } from "../guestbook-email";
@@ -40,6 +41,7 @@ import { deliverGuestbookEmails, guestbookEmail } from "../guestbook-email";
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : undefined);
 const PRIVACY: Privacy[] = ["link", "public", "private"];
 const MODERATION: ModerationMode[] = ["approve_all", "auto", "trusted_only"];
+const MEMBER_ROLES: Role[] = ["admin", "moderator", "trusted"];
 
 export const hostRoutes = new Hono<AppEnv>()
   .use("/memorials", requireUser)
@@ -53,7 +55,11 @@ export const hostRoutes = new Hono<AppEnv>()
     for (const d of ms.docs) {
       const m = await getMemorial(d.id);
       const role = await roleOf(d.id, uid);
-      if (m && role) out.push(adminView(m.id, m, role));
+      if (m && role) {
+        const view = adminView(m.id, m, role);
+        // Trusted contributors don't run the slideshow; the wall key unlocks a private page's media.
+        out.push(can(role, "moderate") ? view : { ...view, wallKey: "" });
+      }
     }
     return c.json({ memorials: out });
   })
@@ -83,7 +89,7 @@ export const hostRoutes = new Hono<AppEnv>()
         date: str((b.service as Record<string, unknown> | undefined)?.date, 10),
         time: str((b.service as Record<string, unknown> | undefined)?.time, 20),
         place: str((b.service as Record<string, unknown> | undefined)?.place, 200),
-        livestreamUrl: str((b.service as Record<string, unknown> | undefined)?.livestreamUrl, 300),
+        livestreamUrl: safeHttpUrl((b.service as Record<string, unknown> | undefined)?.livestreamUrl),
       },
       plan: { tier: mode === "living" ? "free" : "free", hostingUntil: null },
       ownerId: uid,
@@ -150,7 +156,8 @@ export const hostRoutes = new Hono<AppEnv>()
     }
     if (b.service && typeof b.service === "object") {
       const s = b.service as Record<string, unknown>;
-      update.service = JSON.parse(JSON.stringify({ date: str(s.date, 10), time: str(s.time, 20), place: str(s.place, 200), livestreamUrl: str(s.livestreamUrl, 300) }));
+      if (str(s.livestreamUrl, 300) && !safeHttpUrl(s.livestreamUrl)) return c.json({ error: "The livestream link must start with https://" }, 400);
+      update.service = JSON.parse(JSON.stringify({ date: str(s.date, 10), time: str(s.time, 20), place: str(s.place, 200), livestreamUrl: safeHttpUrl(s.livestreamUrl) }));
     }
     if (update.name === null) return c.json({ error: "Name can't be empty." }, 400);
     if ("died" in update) update.diedMD = diedMD(update.died as string | null);
@@ -166,7 +173,12 @@ export const hostRoutes = new Hono<AppEnv>()
     const file = form.file;
     if (!(file instanceof File) || !file.type.startsWith("image/")) return c.json({ error: "Please choose a photo." }, 400);
     const prefix = `media/${id}/cover/${Date.now()}`;
-    const stored = await storeImage(prefix, Buffer.from(await file.arrayBuffer()));
+    let stored: Awaited<ReturnType<typeof storeImage>>;
+    try {
+      stored = await storeImage(prefix, Buffer.from(await file.arrayBuffer()));
+    } catch {
+      return c.json({ error: "We couldn't read that photo. Try a JPEG or PNG." }, 415);
+    }
     await memorials().doc(id).update({ coverPath: stored.display });
     return c.json({ ok: true });
   })
@@ -205,6 +217,9 @@ export const hostRoutes = new Hono<AppEnv>()
     const snap = await ref.get();
     if (!snap.exists) return c.json({ error: "Not found" }, 404);
     const cur = snap.data() as ContributionDoc;
+    // Moderators can't read a closed letter, so they mustn't be able to rewrite it either.
+    const editsContent = typeof b.text === "string" || typeof b.authorName === "string" || typeof b.era === "string";
+    if (editsContent && isSealed(cur) && cur.authorUid !== uid) return c.json({ error: "This letter is sealed." }, 403);
     const next: Partial<ContributionDoc> = {};
     const map: Record<string, ContributionStatus> = { approve: "approved", hide: "hidden", reject: "rejected", pending: "pending" };
     if (b.action && map[b.action]) next.status = map[b.action];
@@ -219,7 +234,7 @@ export const hostRoutes = new Hono<AppEnv>()
       if (m) await sendEmail(c.env, approvedEmail(cur.authorEmail, cur.authorName, m.name, `${c.env.APP_ORIGIN}/m/${m.slug}`));
       await ref.update({ notifiedApproved: true });
     }
-    return c.json({ contribution: contributionView(id, cid, { ...cur, ...next }, true) });
+    return c.json({ contribution: contributionView(id, cid, { ...cur, ...next }, true, uid) });
   })
   .post("/memorials/:id/contributions-bulk", async (c) => {
     const id = c.req.param("id");
@@ -301,6 +316,7 @@ export const hostRoutes = new Hono<AppEnv>()
     const current = await roleOf(id, target);
     const b = (await c.req.json().catch(() => ({}))) as { role?: Role };
     if (!current) return c.json({ error: "Not found" }, 404);
+    if (!MEMBER_ROLES.includes(b.role as Role)) return c.json({ error: "Choose a role." }, 400);
     if (!b.role || !canChangeMember(role, current) || !canAssign(role, b.role)) return c.json({ error: "You can't change that person's role." }, 403);
     await members(id).doc(target).update({ role: b.role });
     await memberships(target).doc(id).set({ role: b.role }, { merge: true });
@@ -341,6 +357,11 @@ export const hostRoutes = new Hono<AppEnv>()
     const uid = c.get("uid")!;
     const m = await getMemorial(id);
     if (!m?.pendingTransfer || m.pendingTransfer.toUid !== uid) return c.json({ error: "No transfer is waiting for you." }, 400);
+    // Someone removed or demoted since the request was made can't still take the page.
+    if ((await roleOf(id, uid)) !== "admin" || m.pendingTransfer.at < Date.now() - 30 * 24 * 3600_000) {
+      await memorials().doc(id).update({ pendingTransfer: null });
+      return c.json({ error: "No transfer is waiting for you." }, 400);
+    }
     const oldOwner = m.ownerId;
     await members(id).doc(uid).update({ role: "owner" });
     await memberships(uid).doc(id).set({ role: "owner" }, { merge: true });
@@ -367,7 +388,7 @@ export const hostRoutes = new Hono<AppEnv>()
     const m = (await getMemorial(id))!;
     const wall = { ...(m.wall ?? {}) };
     if (typeof b.paused === "boolean") wall.paused = b.paused;
-    if (b.pinnedId !== undefined) wall.pinnedId = b.pinnedId;
+    if (b.pinnedId === null || (typeof b.pinnedId === "string" && /^[A-Za-z0-9]{1,40}$/.test(b.pinnedId))) wall.pinnedId = b.pinnedId;
     if (b.skip) wall.skip = (wall.skip ?? 0) + 1;
     wall.updatedAt = Date.now();
     await memorials().doc(id).update({ wall });

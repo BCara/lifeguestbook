@@ -15,6 +15,8 @@ import { queue } from "../notify";
 import { combine, screenImage, screenText, type ScreeningResult } from "../screening";
 import { contributionView, publicView } from "../views";
 import { finishUpload } from "./uploads";
+import { MEDIA_HEADERS, sniffMatches } from "../security";
+import { Readable } from "node:stream";
 
 export function decideStatus(m: Pick<MemorialDoc, "moderation">, screening: ScreeningResult, trusted: boolean): ContributionStatus {
   if (screening.outcome === "critical") return "hidden";
@@ -54,7 +56,9 @@ export const guestRoutes = new Hono<AppEnv>()
     if (allow.contributionLimit != null && m.counts.total >= allow.contributionLimit)
       return c.json({ error: "This page has reached its free limit. The family can upgrade to add more." }, 402);
     const ip = clientIp(c.req.raw.headers);
-    if (await overLimit(`contrib:${m.id}:${ip}`, 60)) return c.json({ error: "You've shared a lot in a short time. Please wait a bit." }, 429);
+    // The per-IP limit can be dodged by forging X-Forwarded-For, so the page also has a ceiling.
+    if ((await overLimit(`contrib:${m.id}:${ip}`, 60)) || (await overLimit(`contrib-page:${m.id}`, 500)))
+      return c.json({ error: "You've shared a lot in a short time. Please wait a bit." }, 429);
 
     const form = await c.req.parseBody();
     const authorName = (typeof form.name === "string" ? form.name.trim() : "").slice(0, 80);
@@ -101,6 +105,7 @@ export const guestRoutes = new Hono<AppEnv>()
           return c.json({ error: "We couldn't read that photo. If it's from an iPhone, try 'Most Compatible' or a screenshot." }, 415);
         }
       } else {
+        if (!sniffMatches(mime, buf.subarray(0, 64))) return c.json({ error: "That file doesn't look like a video or voice recording." }, 415);
         media = await storeFile(prefix, buf, mime, extFor(mime));
       }
     }
@@ -111,8 +116,14 @@ export const guestRoutes = new Hono<AppEnv>()
       if (type === "photo") {
         // A very large photo: process it like any other.
         const [buf] = await bucket().file(done.path).download();
-        const stored = await storeImage(prefix, buf);
-        await bucket().file(done.path).delete().catch(() => undefined);
+        let stored: Awaited<ReturnType<typeof storeImage>>;
+        try {
+          stored = await storeImage(prefix, buf);
+        } catch {
+          return c.json({ error: "We couldn't read that photo. If it's from an iPhone, try 'Most Compatible' or a screenshot." }, 415);
+        } finally {
+          await bucket().file(done.path).delete().catch(() => undefined);
+        }
         media = { display: stored.display, thumb: stored.thumb, mime: stored.mime, bytes: stored.bytes };
         checks.push(screenImage(c.env, stored.displayBuffer));
       } else {
@@ -179,16 +190,33 @@ export const mediaRoutes = new Hono<AppEnv>().get("/:mid/:cid/:variant", async (
   if (!meta) return c.notFound();
   const size = Number(meta.size);
   const type = String(meta.contentType ?? "application/octet-stream");
-  const cache = "private, no-store";
+  const headers = { ...MEDIA_HEADERS, "Content-Type": type, "Accept-Ranges": "bytes", "Cache-Control": "private, no-store" };
   // Range support so videos and audio can seek on iPhone.
-  const range = c.req.header("range");
+  const range = parseRange(c.req.header("range"), size);
+  if (range === "invalid") return new Response(null, { status: 416, headers: { ...headers, "Content-Range": `bytes */${size}` } });
+  // Stream rather than buffer: a 200 MB video read into memory per request would exhaust the instance.
+  const stream = (opts?: { start: number; end: number }) => Readable.toWeb(file.createReadStream(opts)) as ReadableStream;
   if (range) {
-    const match = /bytes=(\d*)-(\d*)/.exec(range);
-    const start = match?.[1] ? Number(match[1]) : 0;
-    const end = match?.[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
-    const [buf] = await file.download({ start, end });
-    return new Response(new Uint8Array(buf), { status: 206, headers: { "Content-Type": type, "Content-Range": `bytes ${start}-${end}/${size}`, "Accept-Ranges": "bytes", "Content-Length": String(buf.length), "Cache-Control": cache } });
+    return new Response(stream(range), { status: 206, headers: { ...headers, "Content-Range": `bytes ${range.start}-${range.end}/${size}`, "Content-Length": String(range.end - range.start + 1) } });
   }
-  const [buf] = await file.download();
-  return new Response(new Uint8Array(buf), { headers: { "Content-Type": type, "Content-Length": String(buf.length), "Accept-Ranges": "bytes", "Cache-Control": cache } });
+  return new Response(stream(), { headers: { ...headers, "Content-Length": String(size) } });
 });
+
+/** A single byte range from a Range header: null when absent or ignorable, "invalid" when unsatisfiable. */
+export function parseRange(header: string | undefined, size: number): { start: number; end: number } | null | "invalid" {
+  if (!header) return null;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!match || (!match[1] && !match[2])) return null; // multi-range or malformed: send the whole file
+  let start: number, end: number;
+  if (!match[1]) {
+    const suffix = Number(match[2]); // bytes=-500 means the last 500 bytes
+    if (suffix === 0) return "invalid";
+    start = Math.max(0, size - suffix);
+    end = size - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
+  }
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start >= size || start > end) return "invalid";
+  return { start, end };
+}

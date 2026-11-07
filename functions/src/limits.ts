@@ -15,6 +15,11 @@ export async function overLimit(key: string, max: number, windowMs = 3600_000): 
   return count > max;
 }
 
+/**
+ * Best-effort client address for rate limiting. X-Forwarded-For's first entry is supplied by the
+ * client and can be forged, so every IP-keyed limit must be paired with a limit on something the
+ * caller can't vary (the email address, the memorial, the signed-in user).
+ */
 export function clientIp(headers: Headers) {
   return (headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
 }

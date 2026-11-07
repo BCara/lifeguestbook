@@ -27,5 +27,9 @@ export const paymentsEnabled = (env: Env) => {
 export const demoPurchasesEnabled = () => isEmulator
   && (process.env.GCLOUD_PROJECT ?? "").startsWith("demo-")
   && !!process.env.FIRESTORE_EMULATOR_HOST;
-/** Dev conveniences (sign-in links in responses, instant upgrades, /api/dev/*) only on the emulator. */
-export const isDev = () => isEmulator;
+/**
+ * Dev conveniences (sign-in links in API responses, /api/dev/*, emails stored instead of sent) only
+ * on the emulator with a demo- project, so a stray FUNCTIONS_EMULATOR flag can't enable them on a
+ * real project.
+ */
+export const isDev = () => isEmulator && (process.env.GCLOUD_PROJECT ?? "").startsWith("demo-");

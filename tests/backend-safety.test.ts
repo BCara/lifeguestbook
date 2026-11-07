@@ -1,3 +1,4 @@
+import { Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "../functions/node_modules/hono/dist/index.js";
 
@@ -14,7 +15,8 @@ vi.mock("../functions/src/db", () => ({
   memorialBySlug: vi.fn(async () => state.memorial),
   roleOf: vi.fn(async () => state.role),
   contributions: () => ({ doc: () => ({ get: async () => ({ data: () => ({ status: state.status, media: { display: "photo.jpg" } }) }) }) }),
-  bucket: () => ({ file: () => ({ getMetadata: async () => [{ size: 15, contentType: "image/jpeg" }], download: state.download }) }),
+  bucket: () => ({ file: () => ({ getMetadata: async () => [{ size: 15, contentType: "image/jpeg" }], download: state.download,
+    createReadStream: (o?: { start: number; end: number }) => Readable.from([Buffer.from("synthetic-image").subarray(o?.start ?? 0, (o?.end ?? 14) + 1)]) }) }),
   memorials: vi.fn(), users: vi.fn(), logAudit: vi.fn(), isSealed: () => false,
 }));
 

@@ -56,7 +56,10 @@ export async function ensureUser(email: string, name?: string) {
   return uid;
 }
 
-export function startSession(c: Context<AppEnv>, uid: string) {
+export async function startSession(c: Context<AppEnv>, uid: string) {
+  // Always a fresh token; a session cookie already in the browser (whoever set it) stops working.
+  const previous = getCookie(c, COOKIE);
+  if (previous) await sessions().doc(sha256(previous)).delete().catch(() => undefined);
   const token = randomToken(32);
   const secure = !c.req.url.startsWith("http://localhost") && !c.req.url.startsWith("http://127.0.0.1");
   setCookie(c, COOKIE, token, { httpOnly: true, secure, sameSite: "Lax", path: "/", maxAge: SESSION_MS / 1000 });
@@ -90,14 +93,14 @@ export const authRoutes = new Hono<AppEnv>()
     return c.json({ next: safeNext(body.next) });
   })
   .post("/email", async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as { email?: string; name?: string; next?: string };
+    const body = (await c.req.json().catch(() => ({}))) as { email?: string; name?: unknown; next?: string };
     if (!validEmail(body.email)) return c.json({ error: "Please enter a valid email address." }, 400);
     if (!isDev() && !emailEnabled(c.env)) return c.json({ error: "Sign-in email is temporarily unavailable." }, 503);
     const email = body.email.trim().toLowerCase();
     if ((await overLimit(`signin:${email}`, 6)) || (await overLimit(`signin-ip:${clientIp(c.req.raw.headers)}`, 30)))
       return c.json({ error: "Too many sign-in emails. Please wait a little and try again." }, 429);
     const token = randomToken(32);
-    await signInTokens().doc(sha256(token)).set({ email, name: body.name?.slice(0, 80) ?? null, next: safeNext(body.next), expiresAt: Date.now() + LINK_MS });
+    await signInTokens().doc(sha256(token)).set({ email, name: typeof body.name === "string" ? body.name.trim().slice(0, 80) || null : null, next: safeNext(body.next), expiresAt: Date.now() + LINK_MS });
     const link = `${c.env.APP_ORIGIN}/api/auth/verify?t=${token}`;
     try {
       await sendEmail(c.env, signInEmail(email, link));

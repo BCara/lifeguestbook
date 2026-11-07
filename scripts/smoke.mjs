@@ -228,13 +228,14 @@ step("writing help drafts a eulogy (sample text without an API key); drafts are 
 
 // Recorded voice notes arrive as "audio/webm;codecs=opus".
 fd = new FormData();
-fd.append("name", "Voice"); fd.append("file", new Blob([Buffer.from("fakeaudio")], { type: "audio/webm;codecs=opus" }), "voice.webm");
+fd.append("name", "Voice"); fd.append("file", new Blob([Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.from("fakeaudio")])], { type: "audio/webm;codecs=opus" }), "voice.webm");
 r = await guest.req("POST", `/m/${slug}/contributions`, undefined, fd);
 assert.equal(r.status, 200, JSON.stringify(r.data));
 step("recorded voice notes with codec parameters are accepted on paid pages");
 
 // Large video in chunks (17 MB -> 3 chunks), as the browser does for anything over 25 MB.
 const big = Buffer.alloc(17 * 1024 * 1024, 7);
+Buffer.from([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]).copy(big); // "ftypisom": uploads are sniffed
 r = await guest.req("POST", `/m/${slug}/uploads`, { size: big.length, type: "video/mp4" });
 assert.equal(r.status, 200, JSON.stringify(r.data));
 const up = r.data;
