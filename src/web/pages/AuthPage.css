@@ -1,0 +1,76 @@
+.public-auth {
+  width: min(100% - 2rem, 920px);
+  margin: clamp(2rem, 6vw, 5rem) auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-content: start;
+  align-items: start;
+  gap: clamp(1.5rem, 5vw, 4.5rem);
+}
+.public-auth-intro { align-self: center; }
+.public-auth-kicker {
+  color: var(--home-green);
+  font-size: .8rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.public-auth h1, .public-auth h2 {
+  margin: 0;
+  font-family: var(--home-serif);
+  font-weight: 500;
+  line-height: 1.12;
+}
+.public-auth h1 { font-size: clamp(2rem, 4.6vw, 3.4rem); letter-spacing: -.035em; }
+.public-auth h2 { font-size: 1.45rem; }
+.public-auth-guest { border-top: 1px solid var(--home-rule); padding-top: 1rem; }
+.public-auth-card {
+  padding: clamp(1.25rem, 3vw, 2rem);
+  border: 1px solid var(--home-rule);
+  border-radius: 1.25rem;
+  background: #fffaf5;
+  box-shadow: 0 8px 26px #39291f0b;
+  overflow-wrap: anywhere;
+}
+.public-auth-card .stack > p { margin: 0; }
+.public-auth-secondary, .public-auth-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .65rem;
+  min-height: 46px;
+  width: 100%;
+  padding: .65rem 1rem;
+  text-align: center;
+}
+.public-auth-secondary {
+  border: 1px solid var(--home-rule);
+  border-radius: 999px;
+  background: white;
+  color: var(--home-ink);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.public-auth-submit { border: 0; cursor: pointer; }
+.public-auth-secondary:disabled, .public-auth-submit:disabled { opacity: .6; cursor: default; }
+.public-auth-divider {
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  margin: 1.2rem 0;
+  color: #675749;
+  font-size: .875rem;
+}
+.public-auth-divider::before, .public-auth-divider::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--home-rule);
+}
+.public-auth-card input { border-color: var(--home-rule); background: #fff; }
+.public-auth-note, .public-auth-guest { color: #675749; font-size: .9rem; }
+.public-auth-invite { max-width: 32rem; grid-template-columns: minmax(0, 1fr); }
+.public-auth-invite h1 { font-size: clamp(1.8rem, 4vw, 2.5rem); }
+@media (max-width: 720px) {
+  .public-auth { max-width: 32rem; grid-template-columns: minmax(0, 1fr); }
+}

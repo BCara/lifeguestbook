@@ -71,7 +71,15 @@ function ManageInner({ id }: { id: string }) {
         </div>
         {welcome && (
           <div className="notice">
-            Your page is ready. Next: <button className="link" onClick={() => setTab("share")}>share the link</button>, and <button className="link" onClick={() => setTab("people")}>invite a co-admin</button> so it's never just on you.
+            {m.mode === "living" ? (
+              <>Your Living Legacy is ready. <button className="link" onClick={() => setTab("story")}>Choose a chapter and add your first story</button>.</>
+            ) : current === "dayof" ? (
+              <>Your guestbook is ready. <Link to={`/dashboard/${m.id}/print`}>Print your QR cards</Link> and scan one before the service.</>
+            ) : m.privacy === "private" ? (
+              <>Your private guestbook is ready. <button className="link" onClick={() => setTab("people")}>Invite family to join</button>.</>
+            ) : (
+              <>Your guestbook is ready. <button className="link" onClick={() => setTab("share")}>Share the contribution link</button>.</>
+            )}
           </div>
         )}
         {pendingTransfer && me && pendingTransfer.toUid === me.uid && (
@@ -294,6 +302,9 @@ function People({ m, onChange, succession }: { m: MemorialAdmin; onChange: () =>
 }
 
 function Share({ m }: { m: MemorialAdmin }) {
+  if (m.privacy === "private") {
+    return <div className="notice">Only signed-in members can open this guestbook. Use People to invite family before sharing the link.</div>;
+  }
   const url = `${location.origin}/m/${m.slug}`;
   const addUrl = `${url}/add`;
   const post = `${m.mode === "living" ? `We're gathering stories and photos of ${m.name}.` : `We're collecting memories of ${m.name}${m.service?.date ? ` ahead of the service on ${new Date(m.service.date).toLocaleDateString(undefined, { day: "numeric", month: "long" })}` : ""}.`} If you have a photo or a story, especially ones the family might never have seen, please add it here. No app or account needed:\n${addUrl}`;
@@ -371,6 +382,17 @@ function DayOf({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
 function Plan({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
   const cur = useMemo<Currency>(() => currencyForTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone), []);
   const [busy, setBusy] = useState<Product>();
+  const [cancelling, setCancelling] = useState(false);
+  const cancelRenewal = async () => {
+    if (!confirm("Stop automatic renewal? Your page keeps its paid features until the hosting end date.")) return;
+    setCancelling(true);
+    try {
+      await api.post("/payments/cancel-renewal", { memorialId: m.id });
+      onChange();
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : "Renewal could not be cancelled. Please try again.");
+    } finally { setCancelling(false); }
+  };
   const buy = async (product: Product) => {
     setBusy(product);
     try {
@@ -391,8 +413,12 @@ function Plan({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
         {m.plan.tier === "free" && <p>{m.counts.total} of {m.allowance.contributionLimit} memories used.</p>}
         {until && <p>{isFrozen(m.plan) ? `Hosting lapsed on ${until}. The page is read-only until renewed.` : `Hosting paid until ${until}.`}</p>}
         {m.plan.tier === "forever" && <p>Hosted for life. Nothing to renew.</p>}
+        {m.recurringBilling && (m.renewalCancelled
+          ? <p>Automatic renewal is cancelled. Your paid hosting remains available until the date above.</p>
+          : <><p>Your subscription renews automatically each year.</p><button className="btn secondary" disabled={cancelling || !!busy} onClick={cancelRenewal}>{cancelling ? "Cancelling…" : "Cancel automatic renewal"}</button></>)}
       </div>
-      <div className="plans">
+      {!m.checkoutAvailable && m.plan.tier !== "forever" && <p className="notice">Paid upgrades are currently unavailable.</p>}
+      {m.checkoutAvailable && <div className="plans">
         {m.plan.tier === "free" && m.mode === "memorial" && (
           <div className="plan featured">
             <h3>Tribute</h3>
@@ -409,11 +435,11 @@ function Plan({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
             <button className="btn" disabled={!!busy} onClick={() => buy("living")}>{busy === "living" ? "…" : "Start"}</button>
           </div>
         )}
-        {(m.plan.tier === "tribute" || m.plan.tier === "living") && (
+        {(m.plan.tier === "tribute" || m.plan.tier === "living") && isFrozen(m.plan) && (!m.recurringBilling || m.renewalCancelled) && (
           <div className="plan">
             <h3>{m.plan.tier === "living" ? "Renew Living Legacy" : "Keep it open"}</h3>
             <p className="price">{formatPrice(m.plan.tier === "living" ? "living" : "hosting", cur)}</p>
-            <p className="small">Adds a year of hosting. Any admin can pay.</p>
+            <p className="small">One year of hosting, renewing annually. Any admin can pay. You can cancel automatic renewal at any time.</p>
             <button className="btn secondary" disabled={!!busy} onClick={() => buy(m.plan.tier === "living" ? "living" : "hosting")}>Renew</button>
           </div>
         )}
@@ -425,7 +451,7 @@ function Plan({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
             <button className="btn secondary" disabled={!!busy} onClick={() => buy("forever")}>{busy === "forever" ? "…" : "Choose Forever"}</button>
           </div>
         )}
-      </div>
+      </div>}
       <p className="muted small">We never delete a page because a renewal was missed. It stays online and downloadable, and any admin can reopen it.</p>
     </section>
   );
@@ -434,7 +460,7 @@ function Plan({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
 function Settings({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
   const [f, setF] = useState({
     name: m.name, born: m.born ?? "", died: m.died ?? "", intro: m.intro ?? "", story: m.story ?? "",
-    privacy: m.privacy, moderation: m.moderation, mode: m.mode,
+    privacy: m.privacy, moderation: m.moderation,
     date: m.service?.date ?? "", time: m.service?.time ?? "", place: m.service?.place ?? "", livestreamUrl: m.service?.livestreamUrl ?? "",
   });
   const [saved, setSaved] = useState(false);
@@ -477,12 +503,6 @@ function Settings({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
             <option value="approve_all">An admin approves everything first</option>
             <option value="auto">Show straight away unless screening flags it</option>
             <option value="trusted_only">Only trusted family post without review</option>
-          </select>
-        </label>
-        <label>Page type
-          <select value={f.mode} onChange={set("mode")}>
-            <option value="living">Living Legacy</option>
-            <option value="memorial">In memory</option>
           </select>
         </label>
         <div className="row gap"><button className="btn">Save</button>{saved && <span className="muted small">Saved</span>}</div>
@@ -549,7 +569,7 @@ function Succession({ m, members, onChange }: { m: MemorialAdmin; members: Membe
   const [result, setResult] = useState<string>();
   const admins = members.filter((x) => x.role === "admin");
   const contact = members.find((x) => x.uid === m.legacyContactUid);
-  const mayConvert = m.role === "owner" || m.legacyContactUid === me?.uid;
+  const mayConvert = m.role === "owner" || (m.role === "admin" && m.legacyContactUid === me?.uid);
   const first = m.name.split(" ")[0];
   return (
     <div className="card stack">

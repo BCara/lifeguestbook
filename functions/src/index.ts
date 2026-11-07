@@ -9,6 +9,7 @@ import { db, users } from "./db";
 import { isDev, type Env } from "./env";
 import { runDailyJobs } from "./jobs";
 import { runDigests } from "./notify";
+import { deliverGuestbookEmails } from "./guestbook-email";
 import { paymentRoutes, stripeWebhook } from "./payments";
 import { guestRoutes, mediaRoutes } from "./routes/guest";
 import { hostRoutes, inviteRoutes } from "./routes/host";
@@ -100,6 +101,7 @@ app.post("/dev/run-jobs", async (c) => {
   if (!isDev()) return c.notFound();
   const now = Number(c.req.query("now")) || Date.now(); // lets the smoke test jump ahead in time
   const digests = await runDigests(c.env, now, true);
+  await deliverGuestbookEmails(c.env);
   const daily = await runDailyJobs(c.env, now);
   return c.json({ digests, daily });
 });
@@ -118,7 +120,9 @@ export const share = onRequest(
 export const notificationDigest = onSchedule(
   { schedule: "every 5 minutes", region: "us-central1", secrets: SECRETS },
   async () => {
-    await runDigests(envFor());
+    const env = envFor();
+    await runDigests(env);
+    await deliverGuestbookEmails(env);
   },
 );
 

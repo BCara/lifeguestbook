@@ -61,7 +61,7 @@ npm run dev
 
 Open http://localhost:5173. Vite proxies `/api` to the Functions emulator. The emulator scripts target `demo-lifeguestbook` and create ignored local settings on first run. `npm run setup:emulators` prepares the same settings for a manual emulator start after `npm run build`. The defaults use dummy provider secrets and disable cloud screening. Set `APP_ORIGIN` in `functions/.env.local` if you serve Vite at a different origin.
 
-Sign-in and invitation links appear on screen or in the functions log. With the dummy Stripe keys, upgrades apply instantly at no charge. Type `[review]` or `[safety]` in a memory to simulate screening flags. `POST /api/dev/run-jobs` runs the digest and daily jobs immediately.
+Sign-in and invitation links appear on screen or in the emulator-only `/api/dev/emails` inbox. With the dummy Stripe keys, upgrades apply instantly at no charge. Type `[review]` or `[safety]` in a memory to simulate screening flags. `POST /api/dev/run-jobs` runs the digest and daily jobs immediately.
 
 Run the same baseline commands as CI. Stop the dev emulators before running the smoke test so its emulator ports are available.
 

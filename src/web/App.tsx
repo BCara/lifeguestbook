@@ -3,7 +3,7 @@ import { Create } from "./pages/Create";
 import { Dashboard } from "./pages/Dashboard";
 import { ProductPage } from "./pages/ProductPage";
 import { products } from "./pages/home-products";
-import { Home } from "./pages/Home";
+import { Home, PublicLayout } from "./pages/Home";
 import { Invite } from "./pages/Invite";
 import { Manage } from "./pages/Manage";
 import { MemorialPage } from "./pages/Memorial";
@@ -34,9 +34,11 @@ export function App() {
   if ((match = path.match(/^\/m\/([\w-]+)\/add$/))) return <AddMemory slug={match[1]} />;
   if ((match = path.match(/^\/m\/([\w-]+)$/))) return <MemorialPage slug={match[1]} />;
   return (
-    <main className="narrow">
-      <h1>Page not found</h1>
-      <a href="/">Go home</a>
-    </main>
+    <PublicLayout>
+      <main className="narrow">
+        <h1>Page not found</h1>
+        <a href="/">Go home</a>
+      </main>
+    </PublicLayout>
   );
 }

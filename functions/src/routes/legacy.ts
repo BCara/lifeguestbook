@@ -9,6 +9,7 @@ import { AiRefusal, DRAFT_KINDS, draftWriting, interviewQuestions, type DraftKin
 import { adminEmails, contributions, diedMD, getMemorial, logAudit, memorials, roleOf, users, type ContributionDoc, type MemorialDoc, type UserDoc } from "../db";
 import { conversionEmail, recoveryEmail, sendEmail } from "../email";
 import { overLimit } from "../limits";
+import { stopRecurringBilling } from "../payments";
 
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : undefined);
 export const RECOVERY_IDLE_MS = 90 * 24 * 3600_000;
@@ -18,10 +19,8 @@ export const drafts = (mid: string) => memorials().doc(mid).collection("drafts")
 
 export interface ChapterDoc { title: string; order: number; era?: string; questions?: { question: string; why: string }[]; createdAt: number }
 
-export async function seedChapters(mid: string) {
-  const batch = memorials().firestore.batch();
-  DEFAULT_CHAPTERS.forEach((title, i) => batch.set(chapters(mid).doc(), { title, order: i, createdAt: Date.now() } satisfies ChapterDoc));
-  await batch.commit();
+export function seedChapters(mid: string, transaction: FirebaseFirestore.Transaction) {
+  DEFAULT_CHAPTERS.forEach((title, i) => transaction.set(chapters(mid).doc(), { title, order: i, createdAt: Date.now() } satisfies ChapterDoc));
 }
 
 /** Free pages get a taste of the writing help; paid pages get plenty. */
@@ -194,11 +193,13 @@ export const legacyRoutes = new Hono<AppEnv>()
     const uid = c.get("uid")!;
     const role = await roleOf(id, uid);
     const m = (await getMemorial(id))!;
+    if (!m || (role !== "owner" && !(role === "admin" && m.legacyContactUid === uid))) return c.json({ error: "Only the owner or the legacy contact can do this." }, 403);
     if (m.mode !== "living") return c.json({ error: "This page is already a memorial." }, 400);
-    if (role !== "owner" && m.legacyContactUid !== uid) return c.json({ error: "Only the owner or the legacy contact can do this." }, 403);
     const b = (await c.req.json().catch(() => ({}))) as { died?: string; service?: Record<string, unknown>; intro?: string };
     const died = str(b.died, 10);
     if (!died) return c.json({ error: "Please add the date they passed away." }, 400);
+    // Stop Stripe charges before changing the entitlement. A provider failure leaves the page unchanged.
+    await stopRecurringBilling(c.env, id, true);
     const update: Record<string, unknown> = { mode: "memorial", died, diedMD: diedMD(died), convertedAt: Date.now(), convertedBy: uid };
     if (b.service) update.service = JSON.parse(JSON.stringify({ date: str(b.service.date, 10), time: str(b.service.time, 20), place: str(b.service.place, 200) }));
     if (str(b.intro, 600)) update.intro = str(b.intro, 600);

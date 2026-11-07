@@ -33,6 +33,7 @@ export const shareApp = new Hono<{ Bindings: Env }>().get("/m/:slug/:rest{.*}?",
   const adding = c.req.path.endsWith("/add");
   const [html, m] = await Promise.all([appShell(c.env), memorialBySlug(slug)]);
   if (!m || m.privacy !== "public") {
+    c.header("X-Robots-Tag", "noindex");
     return c.html(injectMeta(html, { "og:title": "Life Guestbook", "og:description": "A private memorial page.", "og:site_name": "Life Guestbook" }, "Life Guestbook", "noindex"));
   }
   const first = m.name.split(" ")[0];
@@ -55,7 +56,8 @@ export const shareApp = new Hono<{ Bindings: Env }>().get("/m/:slug/:rest{.*}?",
     "og:image:alt": `Photo of ${m.name}`,
     "twitter:card": "summary_large_image",
   };
-  return c.html(injectMeta(html, tags, title, m.privacy === "public" ? "index" : "noindex"));
+  if (adding) c.header("X-Robots-Tag", "noindex");
+  return c.html(injectMeta(html, tags, title, adding ? "noindex" : "index"));
 });
 
 /** 1200×630 share card: their cover photo, or a calm branded card if there isn't one. */

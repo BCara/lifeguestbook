@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "../functions/node_modules/hono/dist/index.js";
 
 const state = vi.hoisted(() => ({
-  memorial: { id: "m1", name: "Sensitive Name", privacy: "private", wallKey: "new-key", plan: { tier: "free" }, coverPath: "cover.jpg" } as any,
+  memorial: { id: "m1", mode: "memorial", name: "Sensitive Name", privacy: "private", wallKey: "new-key", plan: { tier: "free" }, coverPath: "cover.jpg" } as any,
   role: undefined as string | undefined,
   status: "approved",
   transaction: vi.fn(),

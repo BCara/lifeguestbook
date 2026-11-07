@@ -11,15 +11,15 @@ export interface Email {
   unsubscribeUrl?: string;
 }
 
-export async function sendEmail(env: Env, email: Email): Promise<void> {
+export async function sendEmail(env: Env, email: Email, deliveryId?: string): Promise<void> {
   if (!emailEnabled(env)) {
-    console.log(`[email] to=${email.to} subject="${email.subject}"\n${email.text}`);
-    if (isDev()) await db.collection("devEmails").add({ ...email, at: Date.now() });
+    if (!isDev()) throw new Error("Email delivery is unavailable");
+    await db.collection("devEmails").add({ ...email, at: Date.now() });
     return;
   }
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
-    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json", ...(deliveryId ? { "Idempotency-Key": deliveryId } : {}) },
     body: JSON.stringify({
       from: env.EMAIL_FROM,
       reply_to: env.EMAIL_REPLY_TO,
@@ -29,6 +29,7 @@ export async function sendEmail(env: Env, email: Email): Promise<void> {
       text: email.text,
       headers: email.unsubscribeUrl ? { "List-Unsubscribe": `<${email.unsubscribeUrl}>` } : undefined,
     }),
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) throw new Error(`Resend ${res.status}: ${await res.text()}`);
 }
@@ -74,7 +75,15 @@ export function inviteEmail(to: string, inviter: string, memorialName: string, r
   };
 }
 
-export function pageReadyEmail(to: string, memorialName: string, pageUrl: string, dashboardUrl: string): Email {
+export function pageReadyEmail(to: string, memorialName: string, pageUrl: string, dashboardUrl: string, privatePage = false): Email {
+  if (privatePage) {
+    return {
+      to,
+      subject: `${memorialName}'s private guestbook is ready`,
+      html: layout("Your private guestbook is ready", p("Open the dashboard to finish your page and invite family."), { label: "Open dashboard", url: dashboardUrl }),
+      text: `Your private guestbook is ready. Open the dashboard to finish it and invite family: ${dashboardUrl}`,
+    };
+  }
   return {
     to,
     subject: `${memorialName}'s page is ready to share`,
@@ -188,15 +197,15 @@ export function anniversaryEmail(to: string, memorialName: string, years: number
   };
 }
 
-export function dayBeforeEmail(to: string, memorialName: string, wallUrl: string, dashboardUrl: string): Email {
+export function dayBeforeEmail(to: string, memorialName: string, wallUrl: string | undefined, dashboardUrl: string): Email {
   return {
     to,
     subject: `Tomorrow: ${memorialName}'s service checklist`,
     html: layout("Ready for tomorrow",
       p("A few things that help on the day:") +
-      `<ul style="margin:0 0 12px;padding-left:20px"><li>Put the printed QR cards on tables and by the entrance.</li><li>Open the slideshow on the venue laptop: <a href="${esc(wallUrl)}">slideshow link</a>.</li><li>Ask one person to keep an eye on the review queue from their phone.</li></ul>`,
+      `<ul style="margin:0 0 12px;padding-left:20px"><li>Put the printed QR cards on tables and by the entrance.</li>${wallUrl ? `<li>Open the slideshow on the venue laptop: <a href="${esc(wallUrl)}">slideshow link</a>.</li>` : ""}<li>Ask one person to keep an eye on the review queue from their phone.</li></ul>`,
       { label: "Open dashboard", url: dashboardUrl }),
-    text: `Tomorrow's checklist for ${memorialName}. Slideshow: ${wallUrl}  Dashboard: ${dashboardUrl}`,
+    text: `Tomorrow's checklist for ${memorialName}. ${wallUrl ? `Slideshow: ${wallUrl}  ` : ""}Dashboard: ${dashboardUrl}`,
   };
 }
 

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { ROLE_LABELS, type Role } from "../../shared/roles";
 import { api, ApiError } from "../api";
-import { Header } from "../components";
+import { PublicLayout } from "./Home";
+import "./AuthPage.css";
 import { Link, navigate, query } from "../router";
 import { useSession } from "../session";
 
@@ -13,18 +14,16 @@ export function Invite() {
   useEffect(() => {
     api.get<typeof inv>(`/invites/${token}`).then(setInv).catch((e) => setError(e instanceof ApiError ? e.message : "Invalid invitation"));
   }, [token]);
+  const signInUrl = inv ? `/signin?email=${encodeURIComponent(inv.email)}&next=${encodeURIComponent(`/invite?t=${token}`)}` : "/signin";
   return (
-    <>
-      <Header minimal />
-      <main className="narrow">
+    <PublicLayout>
+      <main className="public-auth public-auth-invite">
         {error ? <p className="error">{error}</p> : !inv || loading ? <p className="muted">Loading…</p> : (
-          <div className="card stack">
+          <div className="public-auth-card stack">
             <h1>Help look after {inv.memorialName}'s page</h1>
             <p>You've been invited as <strong>{ROLE_LABELS[inv.role]}</strong>.</p>
-            {me ? (
-              <>
-                {me.email !== inv.email && <p className="muted small">You're signed in as {me.email}. The invitation was sent to {inv.email}; you can still accept it.</p>}
-                <button className="btn" onClick={async () => {
+            {me?.email === inv.email ? (
+                <button className="home-start public-auth-submit" onClick={async () => {
                   try {
                     const r = await api.post<{ memorialId: string }>(`/invites/${token}/accept`);
                     navigate(`/dashboard/${r.memorialId}`);
@@ -32,13 +31,15 @@ export function Invite() {
                     setError(e instanceof ApiError ? e.message : "Couldn't accept.");
                   }
                 }}>Accept invitation</button>
-              </>
             ) : (
-              <Link to={`/signin?email=${encodeURIComponent(inv.email)}&next=${encodeURIComponent(`/invite?t=${token}`)}`} className="btn">Sign in to accept</Link>
+              <>
+                {me && <p className="public-auth-note">You’re signed in as {me.email}. Use {inv.email} to accept this invitation.</p>}
+                <Link to={signInUrl} className="home-start public-auth-submit">{me ? "Switch account" : "Sign in to accept"}</Link>
+              </>
             )}
           </div>
         )}
       </main>
-    </>
+    </PublicLayout>
   );
 }

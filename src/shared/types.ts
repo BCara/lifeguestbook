@@ -42,6 +42,9 @@ export interface ChapterView {
 export const DEFAULT_CHAPTERS = ["Early years", "Growing up", "School days", "Work and calling", "Love and family", "Places that mattered", "Proudest moments", "Advice and wishes"];
 
 export interface MemorialAdmin extends MemorialPublic {
+  checkoutAvailable?: boolean;
+  recurringBilling?: boolean;
+  renewalCancelled?: boolean;
   legacyContactUid?: string | null;
   aiUses: number;
   moderation: ModerationMode;

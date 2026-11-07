@@ -1,7 +1,7 @@
 // FAQ, privacy and terms. The privacy and terms text is a plain-English starting point that needs
 // review by a lawyer in each launch market (UK, Australia, US) before going live.
 import { FREE_CONTRIBUTION_LIMIT } from "../../shared/plans";
-import { Footer, Header } from "../components";
+import { PublicLayout } from "./Home";
 
 const FAQ: [string, string][] = [
   ["Do guests need an app or an account?", "No. Guests scan the QR code or tap the link, add a photo, video, voice message or a few words, and that's it."],
@@ -18,28 +18,28 @@ const FAQ: [string, string][] = [
 
 export function Faq() {
   return (
-    <>
-      <Header />
-      <main className="narrow prose">
-        <h1>Questions</h1>
-        {FAQ.map(([q, a]) => (
-          <section key={q}>
-            <h3>{q}</h3>
-            <p>{a}</p>
-          </section>
-        ))}
-        <p>Something else? Email <a href="mailto:hello@lifeguestbook.com">hello@lifeguestbook.com</a>; a real person replies.</p>
+    <PublicLayout>
+      <main className="public-info prose">
+        <h1>Help &amp; frequently asked questions</h1>
+        <p>Find out how guests share memories, how your family manages the page and what you can keep.</p>
+        <div className="public-faq">
+          {FAQ.map(([q, a]) => (
+            <details key={q}>
+              <summary>{q}</summary>
+              <p>{a}</p>
+            </details>
+          ))}
+        </div>
+        <p>Have another question? Email <a href="mailto:hello@lifeguestbook.com">hello@lifeguestbook.com</a>.</p>
       </main>
-      <Footer />
-    </>
+    </PublicLayout>
   );
 }
 
 export function Privacy() {
   return (
-    <>
-      <Header />
-      <main className="narrow prose">
+    <PublicLayout>
+      <main className="public-info prose">
         <h1>Privacy</h1>
         <p className="notice small">Draft for legal review before launch.</p>
         <h3>What we keep</h3>
@@ -55,16 +55,14 @@ export function Privacy() {
         <h3>Contact</h3>
         <p><a href="mailto:privacy@lifeguestbook.com">privacy@lifeguestbook.com</a></p>
       </main>
-      <Footer />
-    </>
+    </PublicLayout>
   );
 }
 
 export function Terms() {
   return (
-    <>
-      <Header />
-      <main className="narrow prose">
+    <PublicLayout>
+      <main className="public-info prose">
         <h1>Terms</h1>
         <p className="notice small">Draft for legal review before launch.</p>
         <h3>The page belongs to the family</h3>
@@ -78,7 +76,6 @@ export function Terms() {
         <h3>Liability</h3>
         <p>We work hard to keep everything safe and available, but the service is provided as it is. Nothing in these terms limits rights you have under consumer law where you live.</p>
       </main>
-      <Footer />
-    </>
+    </PublicLayout>
   );
 }

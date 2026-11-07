@@ -1,69 +1,86 @@
 export const products = [
   {
-    "id": "living-legacy",
-    "title": "Living Legacy",
-    "line": "Tell your own story, or help someone tell theirs.",
-    "art": "474 378 330 300",
-    "icon": "book",
-    "to": "/new?mode=living",
-    "action": "Start a Living Legacy",
-    "heading": "Tell your life story in your own words",
-    "description": "Record your own life story or help someone you love share theirs. Gather photos, write down memories and invite family to help with a Living Legacy.",
-    "lead": "Start with a photo you love, a place you remember, or a story you’ve told a hundred times. You can make a page for yourself or sit beside someone you love and help them make theirs.",
-    "sections": [
-      [
-        "Start wherever feels right",
-        "You can begin with a single memory. Add photographs and chapters as you go, from childhood and work to the ordinary things you want your family to know."
-      ],
-      [
-        "Make it together",
-        "Invite a family member to help organise photographs or write down a story as you tell it. Let the person whose life you’re recording choose what goes on the page."
-      ]
-    ]
+    id: "memories-from-afar",
+    title: "Memories from Afar",
+    to: "/new?purpose=afar",
+    heading: "Collect photos and stories from people near and far.",
+    description: "Share one link by text, email or in a group chat. Friends and family can add photos and stories to a single Life Guestbook page.",
+    lead: "Gather messages, photos and memories from family, friends and everyone who knew them through one simple link.",
+    features: [
+      ["camera", "Photos & videos", "Capture special moments"],
+      ["message", "Messages & stories", "Save memories in their own words"],
+      ["people", "One simple link", "Make it easy to contribute"],
+      ["shield", "Privacy controls", "Choose what gets shared"],
+    ],
+    steps: [
+      ["mail", "Create a guestbook", "Set up a page for the person you’re remembering and get a link to share."],
+      ["people", "Invite friends and family", "Send the link by text, email or in a group chat. Guests can contribute without an account."],
+      ["photo", "Gather and keep memories", "Review contributions and keep the photos and stories together in one place."],
+    ],
+    benefitsHeading: "Bring everyone’s memories together.",
+    benefits: [
+      "Review and approve contributions",
+      "Keep photos and stories in one place",
+      "Download approved memories",
+      "Make a printable memory book",
+    ],
+    nextHeading: "Start collecting memories today.",
+    nextCopy: "Bring together the photos and stories that matter most.",
   },
   {
-    "id": "memories-from-afar",
-    "title": "Memories from Afar",
-    "line": "Hear from the people who knew them.",
-    "art": "819 378 333 300",
-    "icon": "photo",
-    "to": "/new",
-    "action": "Create a page to share",
-    "heading": "Collect photos and memories for someone you love",
-    "description": "Share one link so friends and family near or far can send photos and stories for a memorial or celebration of life. Your family can review them together.",
-    "lead": "An old friend might have a photograph you’ve never seen. A colleague might remember a story that makes you laugh. Give people who can’t be there a way to share those memories with you.",
-    "sections": [
-      [
-        "Send one link",
-        "Share the link in a Facebook announcement, a group chat or an email. Friends and relatives can leave a photo or a few words in their browser without creating an account."
-      ],
-      [
-        "Read the memories when you’re ready",
-        "Invite someone you trust to help review what comes in. Together, you can choose which memories to share before the service or include on the page afterwards."
-      ]
-    ]
+    id: "day-of-guestbook",
+    title: "Day-of Guestbook",
+    to: "/new?purpose=day-of",
+    heading: "Let guests share photos and messages at your event.",
+    description: "Give guests a simple way to leave photos and memories at a funeral or celebration of life. Print a QR code and share approved memories in a live slideshow.",
+    lead: "Set out a QR code at a funeral or celebration of life. Guests can share photos and messages from their phones, and approved memories can play in a live slideshow on the Tribute plan.",
+    features: [
+      ["screen", "Live slideshow", "Display approved memories with Tribute"],
+      ["qr", "Simple QR code", "Let guests scan and share"],
+      ["photo", "Photos & messages", "Capture memories as guests share them"],
+      ["download", "Keep & download", "Save approved memories afterwards"],
+    ],
+    steps: [
+      ["screen", "Set up your guestbook", "Create a page and print its QR code before the service."],
+      ["qr", "Share with your guests", "Display the code near the entrance or on tables. Guests can scan it and contribute without an account."],
+      ["play", "Watch memories come to life", "Ask a co-admin to review submissions. On the Tribute plan, approved memories appear in the live slideshow."],
+    ],
+    benefitsHeading: "A meaningful part of the day.",
+    benefits: [
+      "Give guests a simple way to take part",
+      "Choose which contributions to display",
+      "Show the slideshow on a venue screen",
+      "Download approved photos and messages later",
+    ],
+    nextHeading: "Make your next event more personal.",
+    nextCopy: "Give guests a simple way to share their photos and messages.",
   },
   {
-    "id": "day-of-guestbook",
-    "title": "Day-of Guestbook & Live Slideshow",
-    "line": "Let guests leave a memory at the service.",
-    "art": "1169 378 346 302",
-    "icon": "screen",
-    "to": "/new",
-    "action": "Create a memorial guestbook",
-    "heading": "A QR guestbook for a funeral or celebration of life",
-    "description": "Give guests a simple way to leave photos and memories at a funeral or celebration of life. Print a QR code and share selected memories in a live slideshow.",
-    "lead": "Some guests will want to share a photograph. Others might leave a few words. Set out a QR card so people can contribute quietly, whenever it feels right.",
-    "sections": [
-      [
-        "Print a QR card for the day",
-        "Place the card beside the guestbook or near the entrance. Guests can scan it and share a memory from their phone without an app or account."
-      ],
-      [
-        "Let someone you trust look after the screen",
-        "The live slideshow is included with Tribute. Ask another family member to review contributions and choose what appears, so you can be with the people who came."
-      ]
-    ]
-  }
+    id: "living-legacy",
+    title: "Living Legacy",
+    to: "/new?mode=living",
+    heading: "Create a digital life story.",
+    description: "Record your own life story or help someone you love share theirs. Gather photos, write down memories and invite family to help with a Living Legacy.",
+    lead: "Capture the moments, people and experiences that have shaped you or someone you love, and keep them together for the future.",
+    features: [
+      ["book", "Tell their story", "Build a personal life story"],
+      ["photo", "Photos & memories", "Save the moments that matter"],
+      ["timeline", "Life chapters", "Organise memories over time"],
+      ["people", "Share with family", "Keep stories for future generations"],
+    ],
+    steps: [
+      ["book", "Start a life story", "Create a private story space for yourself or someone you love."],
+      ["photo", "Add the memories", "Gather photos and stories in chapters. Use suggested questions to get a conversation started."],
+      ["people", "Share and keep it going", "Invite family to help fill in the details and add to the story over time."],
+    ],
+    benefitsHeading: "A lasting record of a life well lived.",
+    benefits: [
+      "Create at your own pace",
+      "Organise memories into chapters",
+      "Invite family to contribute",
+      "Keep stories for future generations",
+    ],
+    nextHeading: "Start a living legacy today.",
+    nextCopy: "Capture the moments, people and experiences that matter most.",
+  },
 ] as const;
-

@@ -12,10 +12,12 @@ export function Create() {
 }
 
 function CreateInner() {
+  const purpose = query(location.search, "purpose");
   const [mode, setMode] = useState<"memorial" | "living">(query(location.search, "mode") === "living" ? "living" : "memorial");
   const [f, setF] = useState({ name: "", born: "", died: "", intro: "", date: "", time: "", place: "", coAdmin1: "", coAdmin2: "", moderation: "approve_all", privacy: "link" });
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [requestId] = useState(() => crypto.randomUUID());
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   return (
     <>
@@ -34,6 +36,7 @@ function CreateInner() {
             setError(undefined);
             try {
               const r = await api.post<{ id: string }>("/memorials", {
+                requestId,
                 mode,
                 name: f.name,
                 born: f.born,
@@ -44,7 +47,8 @@ function CreateInner() {
                 service: { date: f.date, time: f.time, place: f.place },
                 coAdmins: [f.coAdmin1, f.coAdmin2].filter(Boolean),
               });
-              navigate(`/dashboard/${r.id}?welcome=1`);
+              const tab = mode === "living" ? "story" : purpose === "day-of" ? "dayof" : purpose === "afar" ? "share" : "review";
+              navigate(`/dashboard/${r.id}?welcome=1&tab=${tab}`);
             } catch (err) {
               setError(err instanceof ApiError ? err.message : "Something went wrong.");
               setBusy(false);

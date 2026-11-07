@@ -28,6 +28,8 @@ export function adminView(id: string, m: MemorialDoc, role: Role): MemorialAdmin
     ...publicView(id, m),
     moderation: m.moderation,
     plan: m.plan,
+    recurringBilling: !!m.stripeSubscriptionId,
+    renewalCancelled: m.stripeSubscriptionCancelled ?? false,
     role,
     counts: m.counts,
     wallKey: m.wallKey,

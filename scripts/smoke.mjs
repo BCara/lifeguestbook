@@ -2,6 +2,7 @@
 // guest uploads (text + photo), screening holds, approval, public view, report, upgrade, slideshow,
 // ownership transfer, digest email. Run with `npm run test:smoke`.
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { deflateSync } from "node:zlib";
 
 const RUN = Date.now().toString(36); // unique accounts per run, so reruns against saved emulator data work
@@ -26,9 +27,14 @@ class Client {
     const r = await this.req("POST", "/auth/email", { email });
     assert.equal(r.status, 200, JSON.stringify(r.data));
     const token = new URL(r.data.devLink).searchParams.get("t");
-    const v = await this.req("GET", `/auth/verify?t=${token}`);
-    assert.equal(v.status, 302);
-    const replay = await new Client().req("GET", `/auth/verify?t=${token}`);
+    const preview = await new Client().req("GET", `/auth/verify?t=${token}`);
+    assert.equal(preview.status, 200, "opening the link previews the sign-in form");
+    assert.equal(preview.headers.get("set-cookie"), null, "preview does not sign in");
+    const form = new FormData();
+    form.set("t", token);
+    const v = await this.req("POST", "/auth/verify", undefined, form);
+    assert.equal(v.status, 303);
+    const replay = await new Client().req("POST", "/auth/verify", undefined, form);
     assert.equal(replay.headers.get("location"), "/signin?expired=1");
     const me = await this.req("GET", "/me");
     assert.equal(me.data.user.email, email);
@@ -52,9 +58,12 @@ const step = (s) => console.log(`✓ ${s}`);
 await owner.signIn(OWNER);
 step("owner signs in with an email link");
 
-let r = await owner.req("POST", "/memorials", { name: "Margaret Hughes", born: "1948-03-02", died: "2026-10-30", intro: "Mum loved her garden.", service: { date: "2026-11-12", place: "St Mary's, Bury" }, coAdmins: [SISTER] });
+const createBody = { requestId: randomUUID(), name: "Margaret Hughes", born: "1948-03-02", died: "2026-10-30", intro: "Mum loved her garden.", service: { date: "2026-11-12", place: "St Mary's, Bury" }, coAdmins: [SISTER] };
+let r = await owner.req("POST", "/memorials", createBody);
 assert.equal(r.status, 200, JSON.stringify(r.data));
 const { id, slug } = r.data;
+const repeated = await owner.req("POST", "/memorials", createBody);
+assert.deepEqual(repeated.data, { id, slug }, "retry returns the same guestbook");
 step(`memorial created (${slug}) with a co-admin invite`);
 
 r = await owner.req("GET", `/memorials/${id}`);
@@ -66,7 +75,8 @@ step("defaults: link-only, approve-first, free plan");
 // The invite email was sent; accept it as the sister.
 r = await owner.req("GET", "/dev/emails");
 const inviteMail = r.data.emails.find((e) => e.to === SISTER);
-assert.ok(inviteMail, "invite email logged");
+assert.ok(inviteMail, "invite email recorded");
+assert.equal(r.data.emails.filter((e) => e.to === SISTER).length, 1, "creation retry does not send the invite twice");
 const inviteToken = inviteMail.text.match(/invite\?t=([\w-]+)/)[1];
 const wrongAccount = new Client();
 await wrongAccount.signIn(`wrong-${RUN}@example.test`);
@@ -193,6 +203,10 @@ const env = r.data.stories.find((x) => x.id === letterId);
 assert.ok(env.sealed && !env.sealed.open && !env.text, "other admins see only the envelope");
 r = await owner.req("POST", `/memorials/${live.id}/legacy-contact`, { uid: sisterUid });
 assert.equal(r.status, 200);
+assert.equal((await owner.req("PATCH", `/memorials/${live.id}`, { mode: "memorial" })).status, 400, "settings cannot bypass conversion");
+assert.equal((await owner.req("POST", `/memorials/${live.id}/members/${sisterUid}`, { role: "moderator" })).status, 200);
+assert.equal((await sister.req("POST", `/memorials/${live.id}/convert`, { died: "2026-11-01" })).status, 403, "demoted legacy contact cannot convert");
+assert.equal((await owner.req("POST", `/memorials/${live.id}/members/${sisterUid}`, { role: "admin" })).status, 200);
 r = await sister.req("POST", `/memorials/${live.id}/convert`, { died: "2026-11-01" });
 assert.equal(r.status, 200, JSON.stringify(r.data));
 assert.equal(r.data.lettersOpened, 1);

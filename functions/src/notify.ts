@@ -2,9 +2,10 @@
 // digest per admin per memorial, so 200 guests never mean 200 emails. In "instant" mode (the day of
 // the service) the worker runs every few minutes from the scheduled function anyway; the digest
 // just covers a shorter window.
-import { adminEmails, getMemorial, outbox, type OutboxDoc } from "./db";
+import { adminEmails, db, getMemorial, outbox, type OutboxDoc } from "./db";
 import { hmac } from "./crypto";
-import { digestEmail, sendEmail } from "./email";
+import { digestEmail } from "./email";
+import { guestbookEmail } from "./guestbook-email";
 import type { Env } from "./env";
 
 export async function queue(kind: OutboxDoc["kind"], memorialId: string, contributionId: string) {
@@ -19,7 +20,7 @@ export function unsubscribeUrl(env: Env, uid: string) {
 }
 
 export async function runDigests(env: Env, now = Date.now(), force = false) {
-  const snap = await outbox().where("status", "==", "pending").limit(1000).get();
+  const snap = await outbox().where("status", "==", "pending").limit(100).get();
   const byMemorial = new Map<string, { docs: FirebaseFirestore.QueryDocumentSnapshot[]; oldest: number; reports: number }>();
   for (const d of snap.docs) {
     const o = d.data() as OutboxDoc;
@@ -36,15 +37,25 @@ export async function runDigests(env: Env, now = Date.now(), force = false) {
       await Promise.all(g.docs.map((d) => d.ref.update({ status: "sent" })));
       continue;
     }
-    const wait = g.reports > 0 || m.notifyMode === "instant" ? INSTANT_EVERY_MS : DIGEST_EVERY_MS;
+    const serviceDate = Date.parse(m.service?.date ?? "");
+    const serviceWindow = now >= serviceDate - 24 * 3600_000 && now < serviceDate + 24 * 3600_000;
+    const wait = g.reports > 0 || m.notifyMode === "instant" || serviceWindow ? INSTANT_EVERY_MS : DIGEST_EVERY_MS;
     if (!force && now - g.oldest < wait) continue;
     const recipients = await adminEmails(mid);
     const reviewUrl = `${env.APP_ORIGIN}/dashboard/${mid}`;
-    for (const r of recipients) {
-      await sendEmail(env, digestEmail(r.email, m.name, g.docs.length - g.reports, m.counts.pending, g.reports, reviewUrl, unsubscribeUrl(env, r.uid)));
-      sent++;
-    }
-    await Promise.all(g.docs.map((d) => d.ref.update({ status: "sent", sentAt: now })));
+    sent += await db.runTransaction(async (tx) => {
+      const docs = await tx.getAll(...g.docs.map((doc) => doc.ref));
+      const pending = docs.filter((doc) => doc.get("status") === "pending");
+      if (!pending.length) return 0;
+      const reports = pending.filter((doc) => doc.get("kind") === "report").length;
+      const digestId = pending[0].id;
+      for (const r of recipients) {
+        const email = digestEmail(r.email, m.name, pending.length - reports, m.counts.pending, reports, reviewUrl, unsubscribeUrl(env, r.uid));
+        tx.create(guestbookEmail(mid, `digest-${digestId}-${r.uid}`), { memorialId: mid, optOutUid: r.uid, email, dueAt: Date.now() });
+      }
+      for (const doc of pending) tx.update(doc.ref, { status: "sent", sentAt: now });
+      return recipients.length;
+    });
   }
   return sent;
 }

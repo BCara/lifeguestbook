@@ -50,6 +50,8 @@ export interface MemorialDoc {
   recapSentAt?: number;
   dayBeforeSentAt?: number;
   stripeCustomerId?: string;
+  stripeSubscriptionId?: string | null;
+  stripeSubscriptionCancelled?: boolean;
   legacyContactUid?: string | null;
   aiUses?: number;
   convertedAt?: number;

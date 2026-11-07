@@ -18,12 +18,12 @@ export function productLandingHtml(): Plugin {
     closeBundle() {
       const shell = readFileSync(resolve(output, "index.html"), "utf8");
       for (const product of products) {
-        const title = escape(`${product.heading} | LifeGuestbook`);
+        const title = escape(`${product.title} | Life Guestbook`);
         const description = escape(product.description);
-        const sections = product.sections.map(([heading, copy]) =>
+        const sections = product.steps.map(([, heading, copy]) =>
           `<section><h2>${escape(heading)}</h2><p>${escape(copy)}</p></section>`,
         ).join("");
-        const fallback = `<main><a href="/">LifeGuestbook</a><h1>${escape(product.heading)}</h1><p>${escape(product.lead)}</p>${sections}<p><a href="${escape(product.to)}">${escape(product.action)}</a></p><p>LifeGuestbook is a family business.</p></main>`;
+        const fallback = `<main><a href="/">LifeGuestbook</a><h1>${escape(product.heading)}</h1><p>${escape(product.lead)}</p>${sections}<p><a href="${escape(product.to)}">Get Started</a></p><p>LifeGuestbook is a family business.</p></main>`;
         const html = shell
           .replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`)
           .replace(/(<meta name="description" content=")[^"]*/, `$1${description}`)

@@ -30,21 +30,16 @@ import {
   type UserDoc,
 } from "../db";
 import { approvedEmail, inviteEmail, pageReadyEmail, sendEmail, transferEmail } from "../email";
-import { isDev } from "../env";
+import { demoPurchasesEnabled, isDev, paymentsEnabled } from "../env";
 import { overLimit } from "../limits";
 import { storeImage } from "../media";
 import { adminView, contributionView } from "../views";
 import { seedChapters } from "./legacy";
+import { deliverGuestbookEmails, guestbookEmail } from "../guestbook-email";
 
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : undefined);
 const PRIVACY: Privacy[] = ["link", "public", "private"];
 const MODERATION: ModerationMode[] = ["approve_all", "auto", "trusted_only"];
-
-async function addMember(mid: string, uid: string, email: string, role: Role, by: string | undefined, name?: string) {
-  const doc: MemberDoc = { role, email, addedAt: Date.now(), ...(by ? { addedBy: by } : {}), ...(name ? { name } : {}) };
-  await members(mid).doc(uid).set(doc);
-  await memberships(uid).doc(mid).set({ role, addedAt: doc.addedAt });
-}
 
 export const hostRoutes = new Hono<AppEnv>()
   .use("/memorials", requireUser)
@@ -65,8 +60,12 @@ export const hostRoutes = new Hono<AppEnv>()
   .post("/memorials", async (c) => {
     const uid = c.get("uid")!;
     const user = c.get("user")!;
-    if (await overLimit(`create:${uid}`, 10, 24 * 3600_000)) return c.json({ error: "That's a lot of pages in one day. Please contact us." }, 429);
     const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const requestId = typeof b.requestId === "string" && /^[a-f0-9-]{36}$/.test(b.requestId) ? b.requestId : undefined;
+    const ref = requestId ? memorials().doc(sha256(`create:${uid}:${requestId}`)) : memorials().doc();
+    const previous = (await ref.get()).data() as MemorialDoc | undefined;
+    if (previous) return c.json({ id: ref.id, slug: previous.slug });
+    if (await overLimit(`create:${uid}`, 10, 24 * 3600_000)) return c.json({ error: "That's a lot of pages in one day. Please contact us." }, 429);
     const name = str(b.name, 80);
     if (!name) return c.json({ error: "Please enter their name." }, 400);
     const mode = b.mode === "living" ? "living" : "memorial";
@@ -95,16 +94,31 @@ export const hostRoutes = new Hono<AppEnv>()
     };
     doc.diedMD = diedMD(doc.died);
     const clean = JSON.parse(JSON.stringify(doc)) as MemorialDoc;
-    const ref = await memorials().add(clean);
-    await walls().doc(sha256(clean.wallKey)).set({ memorialId: ref.id });
-    await addMember(ref.id, uid, user.email, "owner", undefined, user.name);
-    await logAudit(ref.id, uid, "created");
-    if (mode === "living") await seedChapters(ref.id);
-    // Optional co-admin invites straight from setup.
-    const coAdmins = Array.isArray(b.coAdmins) ? (b.coAdmins as unknown[]).filter(validEmail).slice(0, 2) : [];
-    for (const email of coAdmins) await createInvite(c.env, ref.id, clean, uid, user.email, email, "admin");
-    await sendEmail(c.env, pageReadyEmail(user.email, name, `${c.env.APP_ORIGIN}/m/${slug}`, `${c.env.APP_ORIGIN}/dashboard/${ref.id}`));
-    return c.json({ id: ref.id, slug });
+    const coAdmins = Array.isArray(b.coAdmins)
+      ? [...new Set(b.coAdmins.filter(validEmail).map((email) => email.toLowerCase()))].filter((email) => email !== user.email).slice(0, 2)
+      : [];
+    const result = await db.runTransaction(async (tx) => {
+      const existing = (await tx.get(ref)).data() as MemorialDoc | undefined;
+      if (existing) return { slug: existing.slug, created: false };
+      tx.create(ref, clean);
+      tx.set(walls().doc(sha256(clean.wallKey)), { memorialId: ref.id });
+      tx.set(members(ref.id).doc(uid), { role: "owner", email: user.email, addedAt: clean.createdAt, ...(user.name ? { name: user.name } : {}) });
+      tx.set(memberships(uid).doc(ref.id), { role: "owner", addedAt: clean.createdAt });
+      tx.set(audit(ref.id).doc(), { actor: uid, action: "created", target: null, detail: null, at: clean.createdAt });
+      if (mode === "living") seedChapters(ref.id, tx);
+      for (const email of coAdmins) {
+        const { inviteRef, doc, message } = prepareInvite(c.env, ref.id, clean, uid, user.email, email, "admin");
+        tx.set(inviteRef, doc);
+        tx.set(guestbookEmail(ref.id, inviteRef.id), { memorialId: ref.id, inviteId: inviteRef.id, email: message, dueAt: clean.createdAt });
+      }
+      const pageUrl = `${c.env.APP_ORIGIN}/m/${slug}`;
+      const dashboardUrl = `${c.env.APP_ORIGIN}/dashboard/${ref.id}`;
+      const email = pageReadyEmail(user.email, name, pageUrl, dashboardUrl, clean.privacy === "private");
+      tx.set(guestbookEmail(ref.id, "ready"), { memorialId: ref.id, email, dueAt: clean.createdAt });
+      return { slug, created: true };
+    });
+    if (result.created && isDev()) await deliverGuestbookEmails(c.env, ref.id).catch(() => undefined);
+    return c.json({ id: ref.id, slug: result.slug });
   })
   .get("/memorials/:id", async (c) => {
     const id = c.req.param("id");
@@ -113,7 +127,10 @@ export const hostRoutes = new Hono<AppEnv>()
     if (!m || !role) return c.json({ error: "Not found" }, 404);
     const owner = (await users().doc(m.ownerId).get()).data() as UserDoc | undefined;
     const ownerInactiveDays = owner ? Math.floor((Date.now() - (owner.lastSeenAt ?? owner.createdAt)) / 86400_000) : 0;
-    return c.json({ memorial: adminView(id, m, role), pendingTransfer: m.pendingTransfer ?? null, ownerInactiveDays, recovery: m.recovery ?? null });
+    return c.json({
+      memorial: { ...adminView(id, m, role), checkoutAvailable: paymentsEnabled(c.env) || demoPurchasesEnabled() },
+      pendingTransfer: m.pendingTransfer ?? null, ownerInactiveDays, recovery: m.recovery ?? null,
+    });
   })
   .patch("/memorials/:id", async (c) => {
     const id = c.req.param("id");
@@ -128,7 +145,9 @@ export const hostRoutes = new Hono<AppEnv>()
     if (PRIVACY.includes(b.privacy as Privacy)) update.privacy = b.privacy;
     if (MODERATION.includes(b.moderation as ModerationMode)) update.moderation = b.moderation;
     if (b.notifyMode === "digest" || b.notifyMode === "instant") update.notifyMode = b.notifyMode;
-    if (b.mode === "memorial" || b.mode === "living") update.mode = b.mode;
+    if (b.mode !== undefined && b.mode !== (await getMemorial(id))?.mode) {
+      return c.json({ error: "Use the dedicated memorial conversion flow to change the page type." }, 400);
+    }
     if (b.service && typeof b.service === "object") {
       const s = b.service as Record<string, unknown>;
       update.service = JSON.parse(JSON.stringify({ date: str(s.date, 10), time: str(s.time, 20), place: str(s.place, 200), livestreamUrl: str(s.livestreamUrl, 300) }));
@@ -396,12 +415,22 @@ export const hostRoutes = new Hono<AppEnv>()
     });
   });
 
-async function createInvite(env: AppEnv["Bindings"], mid: string, m: MemorialDoc, uid: string, inviterEmail: string, email: string, role: Role) {
+function prepareInvite(env: AppEnv["Bindings"], mid: string, m: MemorialDoc, uid: string, inviterEmail: string, email: string, role: Role) {
   const token = randomToken(24);
   const doc: InviteDoc = { memorialId: mid, email: email.toLowerCase(), role, invitedBy: uid, createdAt: Date.now(), expiresAt: Date.now() + 30 * 24 * 3600_000 };
-  await invites().doc(sha256(token)).set(doc);
+  const inviteRef = invites().doc(sha256(token));
   const link = `${env.APP_ORIGIN}/invite?t=${token}`;
-  await sendEmail(env, inviteEmail(email, inviterEmail, m.name, ROLE_LABELS[role], link));
+  return { inviteRef, doc, link, message: inviteEmail(email, inviterEmail, m.name, ROLE_LABELS[role], link) };
+}
+
+async function createInvite(...args: Parameters<typeof prepareInvite>) {
+  const { inviteRef, doc, link, message } = prepareInvite(...args);
+  const out = guestbookEmail(doc.memorialId, inviteRef.id);
+  const batch = db.batch();
+  batch.set(inviteRef, doc);
+  batch.set(out, { memorialId: doc.memorialId, inviteId: inviteRef.id, email: message, dueAt: doc.createdAt });
+  await batch.commit();
+  if (isDev()) await deliverGuestbookEmails(args[0], doc.memorialId).catch(() => undefined);
   return link;
 }
 
@@ -442,5 +471,3 @@ export const inviteRoutes = new Hono<AppEnv>()
     await logAudit(inv.memorialId, uid, "joined", undefined, inv.role);
     return c.json({ memorialId: inv.memorialId });
   });
-
-export { addMember };

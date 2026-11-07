@@ -14,10 +14,12 @@ export const isEmulator = process.env.FUNCTIONS_EMULATOR === "true";
 const real = (v: string | undefined) => !!v && v !== "none" && v.length > 8;
 
 export const emailEnabled = (env: Env) => real(env.RESEND_API_KEY);
-/** Live checkout requires a live key; demo projects accept test keys only. */
+/** The Firebase staging hostname uses sandbox keys. The public domain requires live keys. */
 export const paymentsEnabled = (env: Env) => {
   const demo = (process.env.GCLOUD_PROJECT ?? "").startsWith("demo-");
-  const mode = isEmulator && demo ? "test" : "live";
+  const staging = process.env.GCLOUD_PROJECT === "lifeguestbook-cbert"
+    && env.APP_ORIGIN === "https://lifeguestbook-cbert.web.app";
+  const mode = (isEmulator && demo) || staging ? "test" : "live";
   return new RegExp(`^sk_${mode}_[A-Za-z0-9]+$`).test(env.STRIPE_SECRET_KEY)
     && /^whsec_[A-Za-z0-9]+$/.test(env.STRIPE_WEBHOOK_SECRET);
 };
