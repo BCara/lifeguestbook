@@ -74,40 +74,20 @@ npm run test:smoke
 
 The smoke test exercises sign-in, creation, invites, guest uploads, screening, approval, reports, upgrades, slideshow, ownership transfer, digests and downloads on the emulators.
 
-## Going live (one-time setup)
+## Going live
 
-1. Create the Firebase project `lifeguestbook-cbert` (already in `.firebaserc`) on the Blaze plan. Enable Firestore, Storage, and the Cloud Vision and Natural Language APIs.
-2. Copy `functions/.env.example` to `functions/.env` and set `APP_ORIGIN=https://lifeguestbook.com` and `SCREENING_ENABLED=true`.
-3. **Resend**: add the domain `lifeguestbook.com`, then:
+Follow **[docs/go-live-runbook.md](docs/go-live-runbook.md)**: pre-flight, secret-name checks, GoDaddy DNS cutover (keeping the Resend records), switching `APP_ORIGIN` to `https://lifeguestbook.com`, deploy, verification, rollback, Google sign-in settings, and data safety (backups, Firestore TTL, Storage lifecycle).
 
-   ```bash
-   npx firebase functions:secrets:set RESEND_API_KEY
-   ```
+After any deploy, run the read-only checks against the live site:
 
-4. **Stripe**: create a separate account for Life Guestbook and turn on Adaptive Pricing. Add a webhook to `https://lifeguestbook.com/api/stripe/webhook` with the events `checkout.session.completed`, `checkout.session.async_payment_succeeded` and `invoice.paid`. Then set both secrets:
+```sh
+npm run check:deploy -- https://lifeguestbook.com
+```
 
-   ```bash
-   npx firebase functions:secrets:set STRIPE_SECRET_KEY
-   ```
+Provider setup the runbook assumes is already done:
 
-   ```bash
-   npx firebase functions:secrets:set STRIPE_WEBHOOK_SECRET
-   ```
-
-   To keep a feature off, set its secret to `none`.
-5. **Claude (writing help)**: create a key in a workspace at platform.claude.com, then run:
-
-   ```bash
-   npx firebase functions:secrets:set ANTHROPIC_API_KEY
-   ```
-
-   Without it, writing help returns clearly-marked sample text. Requests use `claude-opus-5-5` with the server-side refusal fallback (`fallbacks: "default"`).
-6. Optionally add a Firestore TTL policy on `limits.expiresAt` and `uploads.expiresAt` (the daily job also cleans these up).
-7. Deploy:
-
-   ```bash
-   npm run deploy
-   ```
+- **Firebase**: project `lifeguestbook-cbert` (in `.firebaserc`) on the Blaze plan with Firestore, Storage, and the Cloud Vision and Natural Language APIs enabled. Deploy settings live in `functions/.env.lifeguestbook-cbert` (copy `functions/.env.example`).
+- **Secrets** (`npx firebase functions:secrets:set NAME`): `RESEND_API_KEY` (domain `lifeguestbook.com` verified in Resend), `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` (webhook `https://lifeguestbook.com/api/stripe/webhook` with `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`), `ANTHROPIC_API_KEY` (writing help; requests use `claude-opus-5-5` with `fallbacks: "default"`). Set a secret to `none` to keep that feature off.
 
 ## Next up
 

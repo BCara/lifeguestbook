@@ -10,7 +10,9 @@ export async function overLimit(key: string, max: number, windowMs = 3600_000): 
   await getFirestore().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     count = ((snap.data()?.count as number) ?? 0) + 1;
-    tx.set(ref, { count: FieldValue.increment(1), expiresAt: bucketStart + windowMs * 2 }, { merge: true });
+    const expiresAt = bucketStart + windowMs * 2;
+    // deleteAt is a Timestamp so the Firestore TTL policy (firestore.indexes.json) can remove old counters.
+    tx.set(ref, { count: FieldValue.increment(1), expiresAt, deleteAt: new Date(expiresAt + 24 * 3600_000) }, { merge: true });
   });
   return count > max;
 }

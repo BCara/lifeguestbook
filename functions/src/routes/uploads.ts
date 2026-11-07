@@ -16,7 +16,7 @@ export const CHUNK_BYTES = 8 * 1024 * 1024;
 const MAX_CHUNKS = 32; // Cloud Storage compose takes at most 32 sources
 const uploads = () => db.collection("uploads");
 
-export interface UploadDoc { memorialId: string; mime: string; size: number; chunks: number; received: number[]; ipHash: string; expiresAt: number; done?: boolean }
+export interface UploadDoc { memorialId: string; mime: string; size: number; chunks: number; received: number[]; ipHash: string; expiresAt: number; deleteAt?: Date; done?: boolean }
 
 export const uploadRoutes = new Hono<AppEnv>()
   .post("/:slug/uploads", async (c) => {
@@ -38,7 +38,9 @@ export const uploadRoutes = new Hono<AppEnv>()
     const chunks = Math.ceil(size / CHUNK_BYTES);
     if (chunks > MAX_CHUNKS) return c.json({ error: "That file is too big." }, 413);
     const id = randomToken(16);
-    await uploads().doc(id).set({ memorialId: m.id, mime, size, chunks, received: [], ipHash: sha256(ip), expiresAt: Date.now() + 24 * 3600_000 } satisfies UploadDoc);
+    const expiresAt = Date.now() + 24 * 3600_000;
+    // TTL backstop only: deleteAt is a week later so the daily job removes tmp/ chunks before the doc goes.
+    await uploads().doc(id).set({ memorialId: m.id, mime, size, chunks, received: [], ipHash: sha256(ip), expiresAt, deleteAt: new Date(expiresAt + 7 * 24 * 3600_000) } satisfies UploadDoc);
     return c.json({ uploadId: id, chunkBytes: CHUNK_BYTES, chunks });
   })
   .put("/:slug/uploads/:uploadId/:index", async (c) => {

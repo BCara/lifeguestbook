@@ -34,7 +34,10 @@ export const shareApp = new Hono<{ Bindings: Env }>().get("/m/:slug/:rest{.*}?",
   const [html, m] = await Promise.all([appShell(c.env), memorialBySlug(slug)]);
   if (!m || m.privacy !== "public") {
     c.header("X-Robots-Tag", "noindex");
-    return c.html(injectMeta(html, { "og:title": "Life Guestbook", "og:description": "A private memorial page.", "og:site_name": "Life Guestbook" }, "Life Guestbook", "noindex"));
+    const generic = injectMeta(html, { "og:title": "Life Guestbook", "og:description": "A private memorial page.", "og:site_name": "Life Guestbook" }, "Life Guestbook", "noindex");
+    // Unknown and private slugs answer the same 404 (the app shell still loads for signed-in family),
+    // so crawlers don't index them and nobody can tell a private page from a missing one.
+    return c.html(generic, !m || m.privacy === "private" ? 404 : 200);
   }
   const first = m.name.split(" ")[0];
   const years = lifeYears(m.born, m.died);

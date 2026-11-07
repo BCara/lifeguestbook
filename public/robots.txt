@@ -1,0 +1,13 @@
+# https://lifeguestbook.com/robots.txt
+# Memorial pages are link-only by default and opt in to indexing one by one (public pages only).
+User-agent: *
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /wall
+Disallow: /signin
+Disallow: /invite
+Disallow: /new
+Disallow: /m/*/add
+Allow: /
+
+Sitemap: https://lifeguestbook.com/sitemap.xml

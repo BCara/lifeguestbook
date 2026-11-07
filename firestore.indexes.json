@@ -25,5 +25,8 @@
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    { "collectionGroup": "limits", "fieldPath": "deleteAt", "ttl": true, "indexes": [] },
+    { "collectionGroup": "uploads", "fieldPath": "deleteAt", "ttl": true, "indexes": [] }
+  ]
 }

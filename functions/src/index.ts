@@ -4,6 +4,7 @@ import { onRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { Hono } from "hono";
 import { authRoutes, loadSession, type AppEnv } from "./auth";
+import { exportFirestore } from "./backup";
 import { hmac } from "./crypto";
 import { db, users } from "./db";
 import { isDev, type Env } from "./env";
@@ -24,6 +25,8 @@ const APP_ORIGIN = defineString("APP_ORIGIN", { default: "https://lifeguestbook.
 const EMAIL_FROM = defineString("EMAIL_FROM", { default: "Life Guestbook <hello@lifeguestbook.com>" });
 const EMAIL_REPLY_TO = defineString("EMAIL_REPLY_TO", { default: "hello@lifeguestbook.com" });
 const SCREENING_ENABLED = defineBoolean("SCREENING_ENABLED", { default: false });
+/** gs://bucket for the nightly Firestore export; "none" turns it off. */
+const BACKUP_BUCKET = defineString("BACKUP_BUCKET", { default: "none" });
 const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
@@ -130,5 +133,14 @@ export const dailyJobs = onSchedule(
   { schedule: "every day 08:10", timeZone: "Europe/London", region: "us-central1", secrets: SECRETS, timeoutSeconds: 540 },
   async () => {
     await runDailyJobs(envFor());
+  },
+);
+
+/** Nightly Firestore export to BACKUP_BUCKET (off until the owner sets it; see docs/go-live-runbook.md). */
+export const firestoreExport = onSchedule(
+  { schedule: "every day 02:30", timeZone: "Europe/London", region: "us-central1", timeoutSeconds: 120 },
+  async () => {
+    const project = process.env.GCLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT ?? "";
+    await exportFirestore(project, BACKUP_BUCKET.value());
   },
 );

@@ -77,9 +77,20 @@ describe("revocable content", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response('<html><head><title>App</title></head><body></body></html>')));
     const { shareApp, shareImage } = await import("../functions/src/share");
     const res = await shareApp.request("/m/test", {}, env);
+    expect(res.status).toBe(privacy === "private" ? 404 : 200);
     expect(res.headers.get("cache-control")).toBe("private, no-store");
     const html = await res.text(); expect(html).not.toContain("Sensitive Name"); expect(html).not.toContain("og:image");
     expect(await shareImage("test")).toBeNull(); expect(state.download).not.toHaveBeenCalled();
+  });
+  it("answers unknown memorial links with a noindex 404 that matches private pages", async () => {
+    const saved = state.memorial; state.memorial = null;
+    try {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response('<html><head><title>App</title></head><body></body></html>')));
+      const { shareApp } = await import("../functions/src/share");
+      const res = await shareApp.request("/m/does-not-exist", {}, env);
+      expect(res.status).toBe(404); expect(res.headers.get("x-robots-tag")).toBe("noindex");
+      expect(await res.text()).toContain("A private memorial page.");
+    } finally { state.memorial = saved; }
   });
 });
 
