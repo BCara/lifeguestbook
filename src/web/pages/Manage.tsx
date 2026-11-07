@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { trackPurchase, track } from "../monitoring/analytics";
 import { currencyForTimeZone, formatPrice, type Currency, type Product } from "../../shared/pricing";
 import { isFrozen } from "../../shared/plans";
 import { can, ROLE_LABELS, type Role } from "../../shared/roles";
@@ -39,7 +40,7 @@ function ManageInner({ id }: { id: string }) {
   }, [id]);
   useEffect(() => {
     const paid = query(location.search, "paid");
-    (paid ? api.post("/payments/confirm", { sessionId: paid }).catch(() => undefined) : Promise.resolve()).then(load);
+    (paid ? api.post("/payments/confirm", { sessionId: paid }).then(() => trackPurchase(paid), () => undefined) : Promise.resolve()).then(load);
   }, [load]);
   if (error) return (<><Header /><main className="narrow"><p className="error">{error}</p><Link to="/dashboard">Back to your pages</Link></main></>);
   if (!m) return <div className="page-center muted">Loading…</div>;
@@ -395,6 +396,7 @@ function Plan({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
   };
   const buy = async (product: Product) => {
     setBusy(product);
+    track("upgrade_started", { product, currency: cur });
     try {
       const r = await api.post<{ url?: string; applied?: boolean }>("/payments/checkout", { memorialId: m.id, product, currency: cur });
       if (r.url) location.href = r.url;

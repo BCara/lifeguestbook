@@ -247,3 +247,15 @@ details summary { cursor: pointer; font-weight: 600; }
 .book-people { line-height: 2 !important; }
 .book-end { text-align: center; }
 @media print { .book-page { padding: 0; max-width: none; } .book-toolbar { display: none; } }
+
+/* Cookie consent (src/web/monitoring/ConsentBanner.tsx) */
+.consent-banner { position: fixed; z-index: 50; left: 16px; right: 16px; bottom: 16px; max-width: 560px; margin-inline: auto; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 10px 30px rgba(47, 39, 33, .14); padding: 18px 20px; font-size: .95rem; }
+.consent-banner h2 { font-size: 1.2rem; margin-bottom: .3em; }
+.consent-banner h2:focus { outline: none; }
+.consent-banner p { margin: 0 0 10px; }
+.consent-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin-top: 6px; }
+.consent-actions .btn { flex: 1 1 160px; }
+.consent-banner a:focus-visible, .consent-banner button:focus-visible { outline: 3px solid #607a55; outline-offset: 2px; }
+.home-footer button.link { display: block; color: inherit; text-decoration: none; padding-block: 2px; text-align: left; font-size: inherit; }
+.home-footer button.link:hover { text-decoration: underline; }
+.site-footer button.link { color: var(--muted); font-size: inherit; text-decoration: underline; }

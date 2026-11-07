@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { Link, navigate } from "./router";
 import { useSession } from "./session";
 import { api } from "./api";
+import { analyticsConfigured } from "./monitoring/analytics";
+import { CookieSettingsLink } from "./monitoring/CookieSettingsLink";
 
 export function Header({ minimal }: { minimal?: boolean }) {
   const { me } = useSession();
@@ -41,7 +43,7 @@ export function Footer() {
     <footer className="site-footer">
       <p>© {new Date().getFullYear()} Life Guestbook · Shared memories, never locked to one person.</p>
       <p className="footer-links">
-        <Link to="/faq">Questions</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link> · <a href="mailto:hello@lifeguestbook.com">hello@lifeguestbook.com</a>
+        <Link to="/faq">Questions</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link> ·{analyticsConfigured && <> <CookieSettingsLink /> ·</>} <a href="mailto:hello@lifeguestbook.com">hello@lifeguestbook.com</a>
       </p>
     </footer>
   );

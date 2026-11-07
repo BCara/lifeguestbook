@@ -7,3 +7,4 @@ dist
 functions/.env.*
 !functions/.env.example
 functions/.secret.local
+.env.*.local

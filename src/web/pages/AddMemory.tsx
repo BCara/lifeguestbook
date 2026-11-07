@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { RELATIONS, type MemorialPublic } from "../../shared/types";
 import { MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from "../../shared/plans";
 import { api, ApiError, sendContribution } from "../api";
+import { track } from "../monitoring/analytics";
 import { lifeDates } from "../components";
 import { Link, query } from "../router";
 import { canRecord, Recorder } from "../Recorder";
@@ -75,6 +76,7 @@ export function AddMemory({ slug }: { slug: string }) {
               setProgress(batches.length > 1 ? `Sending ${i + 1} of ${batches.length}… ${Math.round(p * 100)}%` : `Sending… ${Math.round(p * 100)}%`));
             if (r.status !== "approved") pending = true;
           }
+          track("memory_added", { items: batches.length, with_media: files.length > 0, pending });
           setDone({ count: batches.length, pending });
         } catch (err) {
           setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");

@@ -17,8 +17,11 @@ import { legacyRoutes } from "./routes/legacy";
 import { wallRoutes } from "./routes/wall";
 import { shareApp, shareImage } from "./share";
 import { uploadRoutes } from "./routes/uploads";
+import { initMonitoring, monitored, reportError, requestLogging } from "./monitoring";
+import { routeShape } from "../../src/shared/scrub";
 
 process.setSourceMapsEnabled(true);
+initMonitoring(); // no-op unless SENTRY_DSN is set
 
 const APP_ORIGIN = defineString("APP_ORIGIN", { default: "https://lifeguestbook.com" });
 const EMAIL_FROM = defineString("EMAIL_FROM", { default: "Life Guestbook <hello@lifeguestbook.com>" });
@@ -53,8 +56,9 @@ function envFor(): Env {
 
 export const app = new Hono<AppEnv>().basePath("/api");
 
-app.onError((err, c) => {
-  console.error(err);
+app.use("*", requestLogging);
+app.onError(async (err, c) => {
+  await reportError("Unhandled API error", err, { event: "api_error", method: c.req.method, route: routeShape(new URL(c.req.url).pathname) });
   return c.json({ error: "Something went wrong on our side. Please try again." }, 500);
 });
 
@@ -119,16 +123,16 @@ export const share = onRequest(
 
 export const notificationDigest = onSchedule(
   { schedule: "every 5 minutes", region: "us-central1", secrets: SECRETS },
-  async () => {
+  monitored("notificationDigest", async () => {
     const env = envFor();
     await runDigests(env);
     await deliverGuestbookEmails(env);
-  },
+  }),
 );
 
 export const dailyJobs = onSchedule(
   { schedule: "every day 08:10", timeZone: "Europe/London", region: "us-central1", secrets: SECRETS, timeoutSeconds: 540 },
-  async () => {
+  monitored("dailyJobs", async () => {
     await runDailyJobs(envFor());
-  },
+  }),
 );

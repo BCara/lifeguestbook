@@ -24,11 +24,13 @@
   "dependencies": {
     "@firebase/app": "^0.16.5",
     "@firebase/auth": "^1.13.9",
+    "@sentry/react": "^11.11.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@sentry/vite-plugin": "^11.11.0",
     "@types/qrcode": "^1.5.5",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",

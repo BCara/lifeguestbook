@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { track } from "../monitoring/analytics";
 import { api, ApiError } from "../api";
 import { Header, RequireSignIn } from "../components";
 import { navigate, query } from "../router";
@@ -48,6 +49,7 @@ function CreateInner() {
                 coAdmins: [f.coAdmin1, f.coAdmin2].filter(Boolean),
               });
               const tab = mode === "living" ? "story" : purpose === "day-of" ? "dayof" : purpose === "afar" ? "share" : "review";
+              track("guestbook_created", { mode, purpose: purpose ?? undefined });
               navigate(`/dashboard/${r.id}?welcome=1&tab=${tab}`);
             } catch (err) {
               setError(err instanceof ApiError ? err.message : "Something went wrong.");
