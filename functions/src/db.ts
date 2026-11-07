@@ -52,6 +52,8 @@ export interface MemorialDoc {
   stripeCustomerId?: string;
   stripeSubscriptionId?: string | null;
   stripeSubscriptionCancelled?: boolean;
+  /** Set by invoice.payment_failed on a renewal, cleared when a renewal is paid or the subscription ends. */
+  stripeRenewalFailed?: { at: number; invoiceId: string; invoiceUrl?: string | null } | null;
   legacyContactUid?: string | null;
   aiUses?: number;
   convertedAt?: number;

@@ -9,6 +9,15 @@ export const MAX_IMAGE_BYTES = 30 * 1024 * 1024;
 /** One request through Hosting + Functions can carry at most ~32 MB. */
 export const MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
 
+/** Whether paid upgrades can be bought right now (see functions/src/env.ts paymentsStatus). */
+export type PaymentsStatus = "on" | "free-launch" | "unavailable";
+
+/** Friendly copy for admins when upgrades can't be bought. */
+export const PAYMENTS_OFF_COPY: Record<Exclude<PaymentsStatus, "on">, string> = {
+  "free-launch": "Life Guestbook is free while we launch. Paid upgrades aren't on sale yet, so there's nothing to pay. Your page keeps everything it has, and the free plan includes up to " + FREE_CONTRIBUTION_LIMIT + " photos and messages and " + FREE_ADMIN_LIMIT + " co-admins.",
+  unavailable: "Paid upgrades are temporarily unavailable. Nothing has been charged. Please try again later.",
+};
+
 export interface PlanState {
   tier: Tier;
   /** ms since epoch; null = never expires (free or forever). */

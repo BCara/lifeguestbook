@@ -24,6 +24,8 @@ const APP_ORIGIN = defineString("APP_ORIGIN", { default: "https://lifeguestbook.
 const EMAIL_FROM = defineString("EMAIL_FROM", { default: "Life Guestbook <hello@lifeguestbook.com>" });
 const EMAIL_REPLY_TO = defineString("EMAIL_REPLY_TO", { default: "hello@lifeguestbook.com" });
 const SCREENING_ENABLED = defineBoolean("SCREENING_ENABLED", { default: false });
+/** true = free launch: paid upgrades hidden and checkout returns 503, whatever Stripe keys are set. */
+const FREE_LAUNCH = defineBoolean("FREE_LAUNCH", { default: false });
 const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
@@ -48,6 +50,7 @@ function envFor(): Env {
     STRIPE_WEBHOOK_SECRET: secret(STRIPE_WEBHOOK_SECRET),
     SCREENING_ENABLED: SCREENING_ENABLED.value(),
     ANTHROPIC_API_KEY: secret(ANTHROPIC_API_KEY),
+    FREE_LAUNCH: FREE_LAUNCH.value(),
   };
 }
 

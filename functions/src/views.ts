@@ -30,6 +30,8 @@ export function adminView(id: string, m: MemorialDoc, role: Role): MemorialAdmin
     plan: m.plan,
     recurringBilling: !!m.stripeSubscriptionId,
     renewalCancelled: m.stripeSubscriptionCancelled ?? false,
+    renewalFailed: !!m.stripeRenewalFailed,
+    renewalInvoiceUrl: m.stripeRenewalFailed?.invoiceUrl ?? null,
     role,
     counts: m.counts,
     wallKey: m.wallKey,

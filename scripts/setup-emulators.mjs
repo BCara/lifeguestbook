@@ -6,6 +6,7 @@ const defaults = {
     "EMAIL_FROM=Life Guestbook <hello@example.test>",
     "EMAIL_REPLY_TO=hello@example.test",
     "SCREENING_ENABLED=false",
+    "FREE_LAUNCH=false",
     "",
   ].join("\n"),
   ".secret.local": [

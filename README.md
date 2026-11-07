@@ -84,7 +84,14 @@ The smoke test exercises sign-in, creation, invites, guest uploads, screening, a
    npx firebase functions:secrets:set RESEND_API_KEY
    ```
 
-4. **Stripe**: create a separate account for Life Guestbook and turn on Adaptive Pricing. Add a webhook to `https://lifeguestbook.com/api/stripe/webhook` with the events `checkout.session.completed`, `checkout.session.async_payment_succeeded` and `invoice.paid`. Then set both secrets:
+4. **Stripe** (skip for a free launch; see below). Test everything first with [docs/stripe-sandbox-test.md](docs/stripe-sandbox-test.md). On the live account:
+   - Turn on Adaptive Pricing (*Settings → Payments → Adaptive Pricing*).
+   - *Developers → Webhooks → Add endpoint*: URL `https://lifeguestbook.com/api/stripe/webhook`, API version `2025-10-29.clover` (the version the `stripe` SDK in `functions/` pins), events `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`, `invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated`, `customer.subscription.deleted`.
+   - *Settings → Billing → Revenue recovery*: Smart Retries on; when all retries fail, **cancel the subscription** (the page then freezes at its paid date; it is never deleted). Turn on the customer emails for failed payments (with the link to the Stripe-hosted page) and for upcoming renewals.
+   - *Settings → Business → Public details*: statement descriptor (e.g. `LIFEGUESTBOOK`), support email and the terms/privacy URLs; *Branding* for Checkout.
+   - Only card/wallet payment methods are needed. If you enable delayed methods (SEPA, Bacs), the `async_payment_*` events above cover them.
+
+   Then set both secrets:
 
    ```bash
    npx firebase functions:secrets:set STRIPE_SECRET_KEY
@@ -95,6 +102,8 @@ The smoke test exercises sign-in, creation, invites, guest uploads, screening, a
    ```
 
    To keep a feature off, set its secret to `none`.
+
+   **Free launch**: set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` to `none`, or set `FREE_LAUNCH=true` in `functions/.env` (works even with keys set, e.g. to pause sales). The Plan tab then says the page is free while we launch, `/api/payments/*` answers `503` with `code: "free_launch"`, no paid plan can be granted and free-tier limits still apply. If keys are set, webhooks keep processing so existing subscriptions stay correct.
 5. **Claude (writing help)**: create a key in a workspace at platform.claude.com, then run:
 
    ```bash

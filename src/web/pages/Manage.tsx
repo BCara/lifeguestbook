@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { currencyForTimeZone, formatPrice, type Currency, type Product } from "../../shared/pricing";
-import { isFrozen } from "../../shared/plans";
+import { isFrozen, PAYMENTS_OFF_COPY } from "../../shared/plans";
 import { can, ROLE_LABELS, type Role } from "../../shared/roles";
 import type { ContributionView, InviteView, MemberView, MemorialAdmin } from "../../shared/types";
 import { api, ApiError } from "../api";
@@ -345,7 +345,7 @@ function DayOf({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
   return (
     <section className="stack">
       {!m.allowance.slideshow ? (
-        <div className="card"><h3>Live slideshow</h3><p>The live slideshow is part of Tribute. Upgrade on the Plan tab to show approved memories on a screen at the service.</p></div>
+        <div className="card"><h3>Live slideshow</h3><p>{m.payments === "free-launch" ? "The live slideshow is part of the upgraded page, which isn't on sale yet while we launch. Approved memories are all on the page and in the download." : "The live slideshow is part of Tribute. Upgrade on the Plan tab to show approved memories on a screen at the service."}</p></div>
       ) : (
         <>
           <div className="card stack">
@@ -417,7 +417,19 @@ function Plan({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
           ? <p>Automatic renewal is cancelled. Your paid hosting remains available until the date above.</p>
           : <><p>Your subscription renews automatically each year.</p><button className="btn secondary" disabled={cancelling || !!busy} onClick={cancelRenewal}>{cancelling ? "Cancelling…" : "Cancel automatic renewal"}</button></>)}
       </div>
-      {!m.checkoutAvailable && m.plan.tier !== "forever" && <p className="notice">Paid upgrades are currently unavailable.</p>}
+      {m.renewalFailed && !m.renewalCancelled && (
+        <div className="card notice">
+          <h3>Renewal payment didn't go through</h3>
+          <p>Stripe will try the card again over the next few days and has emailed the payer. Nothing changes on the page until the paid hosting date above.</p>
+          {m.renewalInvoiceUrl && <a className="btn secondary" href={m.renewalInvoiceUrl} target="_blank" rel="noreferrer">Pay with another card</a>}
+        </div>
+      )}
+      {!m.checkoutAvailable && m.plan.tier !== "forever" && (
+        <div className="card notice" role="status">
+          {m.payments === "free-launch" && <h3>Free while we launch</h3>}
+          <p>{PAYMENTS_OFF_COPY[m.payments === "free-launch" ? "free-launch" : "unavailable"]}</p>
+        </div>
+      )}
       {m.checkoutAvailable && <div className="plans">
         {m.plan.tier === "free" && m.mode === "memorial" && (
           <div className="plan featured">

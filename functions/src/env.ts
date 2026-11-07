@@ -1,3 +1,5 @@
+import type { PaymentsStatus } from "../../src/shared/plans";
+
 export interface Env {
   APP_ORIGIN: string;
   EMAIL_FROM: string;
@@ -7,6 +9,8 @@ export interface Env {
   STRIPE_WEBHOOK_SECRET: string;
   SCREENING_ENABLED: boolean;
   ANTHROPIC_API_KEY: string;
+  /** Free-launch mode: no new paid checkouts, whatever keys are configured. */
+  FREE_LAUNCH?: boolean;
 }
 
 export const isEmulator = process.env.FUNCTIONS_EMULATOR === "true";
@@ -27,5 +31,20 @@ export const paymentsEnabled = (env: Env) => {
 export const demoPurchasesEnabled = () => isEmulator
   && (process.env.GCLOUD_PROJECT ?? "").startsWith("demo-")
   && !!process.env.FIRESTORE_EMULATOR_HOST;
+/**
+ * What the upgrade UI and checkout API should do.
+ * - "on": Stripe keys are valid for this deployment (or emulator instant upgrades).
+ * - "free-launch": deliberately free, via FREE_LAUNCH=true or STRIPE_SECRET_KEY=none (or unset).
+ * - "unavailable": a key is set but invalid for this deployment (e.g. a test key on the live domain).
+ * Webhooks keep working whenever the keys are valid, so existing subscriptions stay correct.
+ */
+export function paymentsStatus(env: Env): PaymentsStatus {
+  if (env.FREE_LAUNCH) return "free-launch";
+  if (paymentsEnabled(env) || demoPurchasesEnabled()) return "on";
+  const key = (env.STRIPE_SECRET_KEY ?? "").trim();
+  return !key || key === "none" ? "free-launch" : "unavailable";
+}
+/** Paid plans may only be granted from a verified Stripe payment or the demo emulator. */
+export const canGrantPaidPlans = (env: Env) => paymentsEnabled(env) || demoPurchasesEnabled();
 /** Dev conveniences (sign-in links in responses, instant upgrades, /api/dev/*) only on the emulator. */
 export const isDev = () => isEmulator;

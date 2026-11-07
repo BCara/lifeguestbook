@@ -30,12 +30,14 @@ import {
   type UserDoc,
 } from "../db";
 import { approvedEmail, inviteEmail, pageReadyEmail, sendEmail, transferEmail } from "../email";
-import { demoPurchasesEnabled, isDev, paymentsEnabled } from "../env";
+import { isDev, paymentsStatus, type Env } from "../env";
 import { overLimit } from "../limits";
 import { storeImage } from "../media";
 import { adminView, contributionView } from "../views";
 import { seedChapters } from "./legacy";
 import { deliverGuestbookEmails, guestbookEmail } from "../guestbook-email";
+
+const paymentsView = (env: Env) => { const payments = paymentsStatus(env); return { payments, checkoutAvailable: payments === "on" }; };
 
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : undefined);
 const PRIVACY: Privacy[] = ["link", "public", "private"];
@@ -128,7 +130,7 @@ export const hostRoutes = new Hono<AppEnv>()
     const owner = (await users().doc(m.ownerId).get()).data() as UserDoc | undefined;
     const ownerInactiveDays = owner ? Math.floor((Date.now() - (owner.lastSeenAt ?? owner.createdAt)) / 86400_000) : 0;
     return c.json({
-      memorial: { ...adminView(id, m, role), checkoutAvailable: paymentsEnabled(c.env) || demoPurchasesEnabled() },
+      memorial: { ...adminView(id, m, role), ...paymentsView(c.env) },
       pendingTransfer: m.pendingTransfer ?? null, ownerInactiveDays, recovery: m.recovery ?? null,
     });
   })

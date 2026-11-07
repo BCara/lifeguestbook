@@ -1,4 +1,4 @@
-import type { Allowance, PlanState } from "./plans";
+import type { Allowance, PaymentsStatus, PlanState } from "./plans";
 import type { Role } from "./roles";
 
 export type Privacy = "link" | "public" | "private";
@@ -43,6 +43,12 @@ export const DEFAULT_CHAPTERS = ["Early years", "Growing up", "School days", "Wo
 
 export interface MemorialAdmin extends MemorialPublic {
   checkoutAvailable?: boolean;
+  /** "on" | "free-launch" | "unavailable"; checkoutAvailable is true only when "on". */
+  payments?: PaymentsStatus;
+  /** The latest renewal payment failed; Stripe is retrying. */
+  renewalFailed?: boolean;
+  /** Stripe-hosted page where the payer can settle the failed renewal. */
+  renewalInvoiceUrl?: string | null;
   recurringBilling?: boolean;
   renewalCancelled?: boolean;
   legacyContactUid?: string | null;
