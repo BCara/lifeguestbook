@@ -31,7 +31,8 @@ function ManageInner({ id }: { id: string }) {
   // Every load or save takes a ticket; a response only lands if no newer one has been issued since,
   // so a slow refresh can't put pre-save values back on screen (and into the Settings form).
   const ticket = useRef(0);
-  const saved = useCallback((memorial: MemorialAdmin) => { ticket.current++; setM(memorial); }, []);
+  // Merge: the PATCH response omits fields only the GET adds (e.g. checkoutAvailable).
+  const saved = useCallback((memorial: MemorialAdmin) => { ticket.current++; setM((prev) => ({ ...prev, ...memorial })); }, []);
   const load = useCallback(async () => {
     const mine = ++ticket.current;
     try {
@@ -497,11 +498,12 @@ function Settings({ m, onSaved, onChange }: { m: MemorialAdmin; onSaved: (m: Mem
         <label>Name<input value={f.name} onChange={set("name")} required /></label>
         <div className="row gap">
           <label className="grow">Born<input type="date" value={f.born} onChange={set("born")} /></label>
-          <label className="grow">Passed away<input type="date" value={f.died} onChange={set("died")} /></label>
+          {m.mode === "memorial" && <label className="grow">Passed away<input type="date" value={f.died} onChange={set("died")} /></label>}
         </div>
         <label>Welcome message<textarea rows={3} value={f.intro} onChange={set("intro")} /></label>
         <label>Life story <span className="muted">(shown on the page)</span><textarea rows={8} value={f.story} onChange={set("story")} placeholder="Born in Bury in 1948, the youngest of five…" /></label>
         <CoverUpload m={m} onDone={onChange} />
+        {m.mode === "memorial" && (<>
         <h3>Service</h3>
         <div className="row gap wrap">
           <label className="grow">Date<input type="date" value={f.date} onChange={set("date")} /></label>
@@ -509,6 +511,7 @@ function Settings({ m, onSaved, onChange }: { m: MemorialAdmin; onSaved: (m: Mem
         </div>
         <label>Place<input value={f.place} onChange={set("place")} /></label>
         <label>Livestream link<input value={f.livestreamUrl} onChange={set("livestreamUrl")} placeholder="https://" /></label>
+        </>)}
         <h3>Privacy and moderation</h3>
         <label>Who can see the page
           <select value={f.privacy} onChange={set("privacy")}>

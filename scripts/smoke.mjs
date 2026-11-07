@@ -244,6 +244,9 @@ assert.ok(env.sealed && !env.sealed.open && !env.text, "other admins see only th
 r = await owner.req("POST", `/memorials/${live.id}/legacy-contact`, { uid: sisterUid });
 assert.equal(r.status, 200);
 assert.equal((await owner.req("PATCH", `/memorials/${live.id}`, { mode: "memorial" })).status, 400, "settings cannot bypass conversion");
+assert.equal((await owner.req("PATCH", `/memorials/${live.id}`, { died: "2026-10-01" })).status, 200, "ignored field is not an error");
+assert.equal((await owner.req("PATCH", `/memorials/${live.id}`, {})).status, 200, "an empty save is a no-op");
+assert.equal((await owner.req("GET", `/memorials/${live.id}`)).data.memorial.died, undefined, "settings cannot set a date of passing on a living page");
 assert.equal((await owner.req("POST", `/memorials/${live.id}/members/${sisterUid}`, { role: "moderator" })).status, 200);
 assert.equal((await sister.req("POST", `/memorials/${live.id}/convert`, { died: "2026-11-01" })).status, 403, "demoted legacy contact cannot convert");
 assert.equal((await owner.req("POST", `/memorials/${live.id}/members/${sisterUid}`, { role: "admin" })).status, 200);

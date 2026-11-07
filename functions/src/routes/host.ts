@@ -145,15 +145,20 @@ export const hostRoutes = new Hono<AppEnv>()
     if (PRIVACY.includes(b.privacy as Privacy)) update.privacy = b.privacy;
     if (MODERATION.includes(b.moderation as ModerationMode)) update.moderation = b.moderation;
     if (b.notifyMode === "digest" || b.notifyMode === "instant") update.notifyMode = b.notifyMode;
-    if (b.mode !== undefined && b.mode !== (await getMemorial(id))?.mode) {
+    const current = await getMemorial(id);
+    if (!current) return c.json({ error: "Not found" }, 404);
+    if (b.mode !== undefined && b.mode !== current.mode) {
       return c.json({ error: "Use the dedicated memorial conversion flow to change the page type." }, 400);
     }
+    // A Living Legacy only gets a date of passing through the conversion flow.
+    if (current.mode === "living") delete update.died;
     if (b.service && typeof b.service === "object") {
       const s = b.service as Record<string, unknown>;
       update.service = JSON.parse(JSON.stringify({ date: str(s.date, 10), time: str(s.time, 20), place: str(s.place, 200), livestreamUrl: str(s.livestreamUrl, 300) }));
     }
     if (update.name === null) return c.json({ error: "Name can't be empty." }, 400);
     if ("died" in update) update.diedMD = diedMD(update.died as string | null);
+    if (!Object.keys(update).length) return c.json({ memorial: adminView(id, current, role!) });
     await memorials().doc(id).update(update);
     await logAudit(id, uid, "settings", undefined, Object.keys(update).join(","));
     const m = (await getMemorial(id))!;
