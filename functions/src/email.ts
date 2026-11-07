@@ -132,27 +132,84 @@ export function transferEmail(to: string, from: string, memorialName: string, li
   };
 }
 
-export function receiptEmail(to: string, memorialName: string, productName: string, amount: string, dashboardUrl: string): Email {
+export interface ReceiptBilling {
+  /** Yearly subscription that renews automatically until cancelled. */
+  recurring: boolean;
+  /** This payment is an automatic yearly renewal rather than the first payment. */
+  renewal?: boolean;
+  /** Paid hosting end (ms), or null for Forever. */
+  hostingUntil?: number | null;
+}
+
+const longDate = (t: number) => new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+
+/** Payment confirmation. Billing lines here must match the Terms and refund policy (src/web/pages/Info.tsx). */
+export function receiptEmail(to: string, memorialName: string, productName: string, amount: string, dashboardUrl: string, billing: ReceiptBilling = { recurring: false }): Email {
+  const origin = new URL(dashboardUrl).origin;
+  const until = billing.hostingUntil ? longDate(billing.hostingUntil) : null;
+  const planUrl = `${dashboardUrl}${dashboardUrl.includes("?") ? "&" : "?"}tab=plan`;
+  const link = (url: string, label = url) => `<a href="${esc(url)}">${esc(label)}</a>`;
+  // [plain text, html] for each paragraph.
+  const lines: [string, string][] = [];
+  if (billing.renewal) {
+    lines.push([`Your yearly subscription for ${memorialName}'s page has renewed. We've received ${amount} for ${productName}.`,
+      `Your yearly subscription for ${esc(memorialName)}'s page has renewed. We've received ${esc(amount)} for <strong>${esc(productName)}</strong>.`]);
+  } else {
+    lines.push([`We've received your payment of ${amount} for ${productName} on ${memorialName}'s page. Everything is unlocked now.`,
+      `We've received your payment of ${esc(amount)} for <strong>${esc(productName)}</strong> on ${esc(memorialName)}'s page. Everything is unlocked now.`]);
+  }
+  if (billing.hostingUntil === null) lines.push(["Hosting: for life (Forever). There's nothing to renew.", "Hosting: for life (Forever). There's nothing to renew."]);
+  else if (until) lines.push([`Hosting is paid until ${until}.`, `Hosting is paid until ${esc(until)}.`]);
+  if (billing.recurring) {
+    const renews = `This is a subscription. It renews automatically each year${until ? ` on or around ${until}` : ""} at the yearly price (currently ${amount}) until you cancel. We'll email you before each renewal.`;
+    const cancel = "Cancel any time from the Plan tab on your dashboard; you keep paid features until the end of the year you've paid for.";
+    lines.push([`${renews} ${cancel} ${planUrl}`, `${esc(renews)} ${esc(cancel)} ${link(planUrl, "Manage renewal")}`]);
+  } else if (billing.hostingUntil !== null) {
+    lines.push(["This was a one-off payment. It won't renew automatically.", "This was a one-off payment. It won't renew automatically."]);
+  }
+  const refund = "Changed your mind? Email us within 14 days of this payment for a full refund.";
+  lines.push([`${refund} Refunds and cancellation: ${origin}/refunds  Terms: ${origin}/terms`,
+    `${esc(refund)} ${link(`${origin}/refunds`, "Refunds and cancellation")} · ${link(`${origin}/terms`, "Terms")}`]);
   return {
     to,
-    subject: `Receipt: ${productName} for ${memorialName}`,
-    html: layout("Thank you", p(`We've received your payment of ${esc(amount)} for <strong>${esc(productName)}</strong> on ${esc(memorialName)}'s page. Everything is unlocked now.`),
-      { label: "Open dashboard", url: dashboardUrl }),
-    text: `Payment received: ${productName} (${amount}) for ${memorialName}. ${dashboardUrl}`,
+    subject: billing.renewal ? `Receipt: ${productName} renewed for ${memorialName}` : `Receipt: ${productName} for ${memorialName}`,
+    html: layout("Thank you", lines.map(([, h]) => p(h)).join(""), { label: "Open dashboard", url: dashboardUrl }),
+    text: `${lines.map(([t]) => t).join("\n\n")}\n\n${dashboardUrl}`,
   };
 }
 
-export function renewalEmail(to: string, memorialName: string, daysLeft: number, dashboardUrl: string): Email {
+/**
+ * Hosting reminders 30 and 7 days before the end date, and on the day it lapses.
+ * `autoRenews` is true while a yearly subscription is active (not cancelled): those pages are charged
+ * automatically, so the email is a renewal notice rather than a prompt to pay.
+ */
+export function renewalEmail(to: string, memorialName: string, daysLeft: number, dashboardUrl: string, autoRenews = false, hostingUntil?: number): Email {
   const lapsed = daysLeft <= 0;
+  const when = hostingUntil ? longDate(hostingUntil) : `in ${daysLeft} days`;
+  const origin = new URL(dashboardUrl).origin;
+  if (autoRenews && !lapsed) {
+    return {
+      to,
+      subject: `${memorialName}'s page: subscription renews in ${daysLeft} days`,
+      html: layout("Your yearly subscription renews soon",
+        p(`The yearly subscription for ${esc(memorialName)}'s page will renew automatically ${hostingUntil ? "on " : ""}${esc(when)}. The card on file will be charged the yearly price shown on your last receipt.`) +
+        p("You don't need to do anything to keep the page open. To stop renewal, any admin can cancel from the Plan tab before then; the page keeps its paid features until the end of the paid year, then stays online read-only. Nothing is ever deleted.") +
+        p(`If a renewal goes through that you didn't want, email us within 14 days for a full refund. <a href="${esc(origin)}/refunds">Refunds and cancellation</a>.`),
+        { label: "Manage renewal", url: dashboardUrl }),
+      text: `${memorialName}: your yearly subscription renews automatically ${when} at the price on your last receipt. Cancel any time from the Plan tab: ${dashboardUrl}\nRefunds and cancellation: ${origin}/refunds`,
+    };
+  }
   return {
     to,
-    subject: lapsed ? `${memorialName}'s page is now read-only` : `${memorialName}'s page: hosting renews in ${daysLeft} days`,
+    subject: lapsed ? `${memorialName}'s page is now read-only` : `${memorialName}'s page: hosting ends in ${daysLeft} days`,
     html: layout(lapsed ? "The page is safe, but read-only" : "A reminder about hosting",
       (lapsed
-        ? p(`Hosting for ${esc(memorialName)}'s page has lapsed. <strong>Nothing has been deleted</strong>: the page stays online and you can download everything. New memories and the slideshow are paused until any admin renews.`)
-        : p(`Hosting for ${esc(memorialName)}'s page ends in ${daysLeft} days. Any admin can renew, or choose Forever so it never needs renewing.`)),
-      { label: "Renew hosting", url: dashboardUrl }),
-    text: `${memorialName}: ${lapsed ? "hosting lapsed; page is read-only, nothing deleted" : `hosting ends in ${daysLeft} days`}. ${dashboardUrl}`,
+        ? p(`Hosting for ${esc(memorialName)}'s page has ended. <strong>Nothing has been deleted</strong>: the page stays online and you can download everything. New memories and the slideshow are paused until any admin reopens it.`) +
+          p("Any admin can reopen it from the Plan tab with yearly hosting (renews automatically until cancelled) or Forever (a one-off payment).")
+        : p(`Hosting for ${esc(memorialName)}'s page ends ${hostingUntil ? "on " : ""}${esc(when)}. It won't renew automatically and you won't be charged.`) +
+          p("When it ends, nothing is deleted: the page stays online and downloadable, and new memories and the slideshow pause until an admin reopens it. To avoid that, any admin can choose Forever now, a one-off payment so it never needs renewing.")),
+      { label: lapsed ? "Reopen the page" : "See options", url: dashboardUrl }),
+    text: `${memorialName}: ${lapsed ? "hosting has ended; the page is read-only and nothing is deleted. Any admin can reopen it" : `hosting ends ${when} and won't renew automatically. Nothing is deleted when it ends`}. ${dashboardUrl}`,
   };
 }
 

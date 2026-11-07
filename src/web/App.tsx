@@ -11,7 +11,7 @@ import { Print } from "./pages/Print";
 import { SignIn } from "./pages/SignIn";
 import { Wall } from "./pages/Wall";
 import { Book } from "./pages/Book";
-import { Faq, Privacy, Terms } from "./pages/Info";
+import { Cookies, Faq, Privacy, Refunds, Terms } from "./pages/Info";
 import { useLocation } from "./router";
 
 export function App() {
@@ -28,6 +28,8 @@ export function App() {
   if (path === "/faq") return <Faq />;
   if (path === "/privacy") return <Privacy />;
   if (path === "/terms") return <Terms />;
+  if (path === "/cookies") return <Cookies />;
+  if (path === "/refunds") return <Refunds />;
   if ((match = path.match(/^\/dashboard\/([\w-]+)\/book$/))) return <Book id={match[1]} />;
   if ((match = path.match(/^\/dashboard\/([\w-]+)\/print$/))) return <Print id={match[1]} />;
   if ((match = path.match(/^\/dashboard\/([\w-]+)$/))) return <Manage id={match[1]} />;

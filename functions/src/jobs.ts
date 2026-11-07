@@ -26,7 +26,7 @@ export async function runDailyJobs(env: Env, now = Date.now()) {
     const stage = days <= 0 ? "lapsed" : days <= 7 ? "7" : days <= 30 ? "30" : null;
     if (!stage || m.reminders?.[stage]) continue;
     for (const a of await adminEmails(d.id, ["owner", "admin"])) {
-      await sendEmail(env, renewalEmail(a.email, m.name, days, `${env.APP_ORIGIN}/dashboard/${d.id}?tab=plan`));
+      await sendEmail(env, renewalEmail(a.email, m.name, days, `${env.APP_ORIGIN}/dashboard/${d.id}?tab=plan`, !!m.stripeSubscriptionId && !m.stripeSubscriptionCancelled, m.plan.hostingUntil));
       sent++;
     }
     await d.ref.update({ [`reminders.${stage}`]: now });

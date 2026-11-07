@@ -260,6 +260,9 @@
 .public-page > .home-footer { border-top: 1px solid var(--home-rule); }
 .public-info { max-width: 760px; }
 .public-info h1 { font-family: var(--home-serif); }
+.public-info .table-scroll { overflow-x: auto; margin: 0 0 1rem; }
+.public-info table { border-collapse: collapse; width: 100%; }
+.public-info th, .public-info td { border-bottom: 1px solid rgba(0, 0, 0, .12); padding: .4rem .5rem; text-align: left; vertical-align: top; }
 .public-faq { margin-block: 28px; border-top: 1px solid var(--home-rule); }
 .public-faq details { border-bottom: 1px solid var(--home-rule); padding: 15px 4px; }
 .public-faq summary { cursor: pointer; font-weight: 700; }

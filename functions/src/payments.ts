@@ -59,7 +59,8 @@ export async function applyPurchase(env: Env, memorialId: string, product: Produ
     tx.set(audit(memorialId).doc(), { actor: payerUid, action: "purchase", detail: product, at: Date.now() });
     if (payer) tx.set(guestbookEmail(memorialId, `receipt-${paymentRef}`), {
       memorialId, dueAt: Date.now(),
-      email: receiptEmail(payer.email, m.name, PRODUCT_NAMES[product], amountText, `${env.APP_ORIGIN}/dashboard/${memorialId}`),
+      email: receiptEmail(payer.email, m.name, PRODUCT_NAMES[product], amountText, `${env.APP_ORIGIN}/dashboard/${memorialId}`,
+        { recurring: RECURRING[product] && !!billing.subscriptionId, renewal: billing.renewal, hostingUntil: plan.hostingUntil }),
     });
     return true;
   });

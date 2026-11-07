@@ -96,12 +96,12 @@ function HomeFooter({ home, product }: { home: boolean; product: boolean }) {
         <h2>Support</h2>
         <Link to="/faq">Help &amp; FAQs</Link>
         <a href="mailto:hello@lifeguestbook.com">Contact Us</a>
-        {!product && <><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link></>}
+        {!product && <><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link><Link to="/cookies">Cookies</Link><Link to="/refunds">Refunds</Link></>}
       </div>
       <div className={product ? "product-footer-bottom" : "home-footer-account"}>
         {product && <small>© {new Date().getFullYear()} Life Guestbook. All rights reserved.</small>}
         <Link to={me ? "/dashboard" : "/signin"}>{me ? "Your pages" : "Sign in"}</Link>
-        {product && <><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link></>}
+        {product && <><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link><Link to="/cookies">Cookies</Link><Link to="/refunds">Refunds</Link></>}
       </div>
     </footer>
   );

@@ -41,7 +41,7 @@ export function Footer() {
     <footer className="site-footer">
       <p>© {new Date().getFullYear()} Life Guestbook · Shared memories, never locked to one person.</p>
       <p className="footer-links">
-        <Link to="/faq">Questions</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link> · <a href="mailto:hello@lifeguestbook.com">hello@lifeguestbook.com</a>
+        <Link to="/faq">Questions</Link> · <Link to="/privacy">Privacy</Link> · <Link to="/terms">Terms</Link> · <Link to="/cookies">Cookies</Link> · <Link to="/refunds">Refunds</Link> · <a href="mailto:hello@lifeguestbook.com">hello@lifeguestbook.com</a>
       </p>
     </footer>
   );

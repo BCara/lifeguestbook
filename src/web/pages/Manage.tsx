@@ -384,7 +384,7 @@ function Plan({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
   const [busy, setBusy] = useState<Product>();
   const [cancelling, setCancelling] = useState(false);
   const cancelRenewal = async () => {
-    if (!confirm("Stop automatic renewal? Your page keeps its paid features until the hosting end date.")) return;
+    if (!confirm("Stop automatic renewal? You won't be charged again. The page keeps its paid features until the hosting end date, then stays online read-only.")) return;
     setCancelling(true);
     try {
       await api.post("/payments/cancel-renewal", { memorialId: m.id });
@@ -415,7 +415,7 @@ function Plan({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
         {m.plan.tier === "forever" && <p>Hosted for life. Nothing to renew.</p>}
         {m.recurringBilling && (m.renewalCancelled
           ? <p>Automatic renewal is cancelled. Your paid hosting remains available until the date above.</p>
-          : <><p>Your subscription renews automatically each year.</p><button className="btn secondary" disabled={cancelling || !!busy} onClick={cancelRenewal}>{cancelling ? "Cancelling…" : "Cancel automatic renewal"}</button></>)}
+          : <><p>Your subscription renews automatically each year{until ? ` on ${until}` : ""} at the yearly price until cancelled. We'll email a reminder before each renewal.</p><button className="btn secondary" disabled={cancelling || !!busy} onClick={cancelRenewal}>{cancelling ? "Cancelling…" : "Cancel automatic renewal"}</button></>)}
       </div>
       {!m.checkoutAvailable && m.plan.tier !== "forever" && <p className="notice">Paid upgrades are currently unavailable.</p>}
       {m.checkoutAvailable && <div className="plans">
@@ -423,7 +423,7 @@ function Plan({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
           <div className="plan featured">
             <h3>Tribute</h3>
             <p className="price">{formatPrice("tribute", cur)}</p>
-            <p className="small">Unlimited memories, video and voice, live slideshow, unlimited admins. 2 years of hosting included.</p>
+            <p className="small">Unlimited memories, video and voice, live slideshow, unlimited admins. 2 years of hosting included. One-off payment; it doesn't renew automatically.</p>
             <button className="btn" disabled={!!busy} onClick={() => buy("tribute")}>{busy === "tribute" ? "…" : "Upgrade"}</button>
           </div>
         )}
@@ -431,7 +431,7 @@ function Plan({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
           <div className="plan featured">
             <h3>Living Legacy</h3>
             <p className="price">{formatPrice("living", cur)}</p>
-            <p className="small">Everything in Tribute while they're with us. Becomes their memorial later, with 2 years included.</p>
+            <p className="small">Everything in Tribute while they're with us. Renews automatically every year at {formatPrice("living", cur)} until cancelled; cancel any time on this tab. When it becomes their memorial, the subscription stops and 2 years of hosting are included.</p>
             <button className="btn" disabled={!!busy} onClick={() => buy("living")}>{busy === "living" ? "…" : "Start"}</button>
           </div>
         )}
@@ -439,7 +439,7 @@ function Plan({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
           <div className="plan">
             <h3>{m.plan.tier === "living" ? "Renew Living Legacy" : "Keep it open"}</h3>
             <p className="price">{formatPrice(m.plan.tier === "living" ? "living" : "hosting", cur)}</p>
-            <p className="small">One year of hosting, renewing annually. Any admin can pay. You can cancel automatic renewal at any time.</p>
+            <p className="small">One year of hosting. Renews automatically every year at {formatPrice(m.plan.tier === "living" ? "living" : "hosting", cur)} until cancelled; cancel any time on this tab. Any admin can pay.</p>
             <button className="btn secondary" disabled={!!busy} onClick={() => buy(m.plan.tier === "living" ? "living" : "hosting")}>Renew</button>
           </div>
         )}
@@ -447,12 +447,13 @@ function Plan({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
           <div className="plan">
             <h3>Forever</h3>
             <p className="price">{formatPrice("forever", cur)}</p>
-            <p className="small">Everything, hosted for life. No renewals to remember.</p>
+            <p className="small">Everything, hosted for life. One-off payment, no renewals to remember.{m.recurringBilling && !m.renewalCancelled ? " Your yearly subscription stops when you switch." : ""}</p>
             <button className="btn secondary" disabled={!!busy} onClick={() => buy("forever")}>{busy === "forever" ? "…" : "Choose Forever"}</button>
           </div>
         )}
       </div>}
       <p className="muted small">We never delete a page because a renewal was missed. It stays online and downloadable, and any admin can reopen it.</p>
+      {m.checkoutAvailable && m.plan.tier !== "forever" && <p className="muted small">Prices are per page. By paying you agree to our <Link to="/terms">Terms</Link>. Changed your mind? Email us within 14 days of any payment for a full refund. <Link to="/refunds">Refunds and cancellation</Link>.</p>}
     </section>
   );
 }
