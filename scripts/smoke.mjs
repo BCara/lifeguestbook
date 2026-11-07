@@ -72,6 +72,25 @@ assert.equal(r.data.memorial.role, "owner");
 assert.equal(r.data.memorial.plan.tier, "free");
 step("defaults: link-only, approve-first, free plan");
 
+// Regression: the owner's first privacy change must stick, and a later save of another setting
+// (the Settings form now sends only edited fields) must not put the old privacy back.
+r = await owner.req("PATCH", `/memorials/${id}`, { privacy: "private" });
+assert.equal(r.status, 200, JSON.stringify(r.data));
+assert.equal(r.data.memorial.privacy, "private", "PATCH response carries the new privacy");
+r = await owner.req("GET", `/memorials/${id}`);
+assert.equal(r.data.memorial.privacy, "private", "first privacy change persists");
+assert.match(r.headers.get("cache-control") ?? "", /no-store/, "settings reads are never cached");
+assert.equal((await guest.req("GET", `/m/${slug}`)).status, 404, "private page hidden from guests straight away");
+r = await owner.req("PATCH", `/memorials/${id}`, { moderation: "auto" });
+assert.equal(r.data.memorial.privacy, "private", "saving another setting keeps privacy");
+r = await owner.req("GET", `/memorials/${id}`);
+assert.equal(r.data.memorial.privacy, "private");
+assert.equal(r.data.memorial.moderation, "auto");
+r = await owner.req("PATCH", `/memorials/${id}`, { privacy: "link", moderation: "approve_all" });
+assert.equal((await owner.req("GET", `/memorials/${id}`)).data.memorial.privacy, "link", "a later change persists too");
+assert.equal((await guest.req("GET", `/m/${slug}`)).status, 200);
+step("first privacy change persists; later saves don't revert it");
+
 // The invite email was sent; accept it as the sister.
 r = await owner.req("GET", "/dev/emails");
 const inviteMail = r.data.emails.find((e) => e.to === SISTER);
@@ -143,6 +162,27 @@ r = await guest.req("GET", `/wall?k=${wallKey}`);
 assert.equal(r.status, 200);
 assert.equal(r.data.items.length, 1);
 step("any admin can upgrade (dev: instant); 2 years hosting; slideshow unlocked");
+
+// Slideshow remote control from a phone, and a fresh link retires the old one.
+r = await sister.req("POST", `/memorials/${id}/wall`, { paused: true });
+assert.equal(r.status, 200);
+r = await sister.req("POST", `/memorials/${id}/wall`, { skip: true });
+r = await guest.req("GET", `/wall?k=${wallKey}`);
+assert.equal(r.data.wall.paused, true);
+assert.equal(r.data.wall.skip, 1);
+assert.equal((await guest.req("POST", `/memorials/${id}/wall`, { paused: false })).status, 401, "guests can't drive the slideshow");
+r = await owner.req("POST", `/memorials/${id}/wall/rotate`);
+assert.equal((await guest.req("GET", `/wall?k=${wallKey}`)).status, 404, "old slideshow link stops working");
+assert.equal((await guest.req("GET", `/wall?k=${r.data.wallKey}`)).status, 200);
+step("slideshow remote control works; a new link retires the old one");
+
+// Memory book reads approved memories and chapters as an admin; guests get nothing.
+r = await sister.req("GET", `/memorials/${id}/contributions?status=approved`);
+assert.equal(r.status, 200);
+assert.ok(r.data.contributions.every((c) => c.status === "approved") && r.data.contributions.length >= 1);
+assert.equal((await sister.req("GET", `/memorials/${id}/chapters`)).status, 200);
+assert.equal((await guest.req("GET", `/memorials/${id}/contributions?status=approved`)).status, 401);
+step("memory book data loads for admins only");
 
 r = await owner.req("GET", `/memorials/${id}/members`);
 const sisterUid = r.data.members.find((m) => m.email === SISTER).uid;

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { currencyForTimeZone, formatPrice, type Currency, type Product } from "../../shared/pricing";
 import { isFrozen } from "../../shared/plans";
 import { can, ROLE_LABELS, type Role } from "../../shared/roles";
+import { settingsForm, settingsPatch } from "../../shared/settings";
 import type { ContributionView, InviteView, MemberView, MemorialAdmin } from "../../shared/types";
 import { api, ApiError } from "../api";
 import { CopyField, Header, lifeDates, QrImage, RequireSignIn, timeAgo } from "../components";
@@ -15,7 +16,7 @@ type Tab = "review" | "story" | "memories" | "writing" | "people" | "share" | "d
 export function Manage({ id }: { id: string }) {
   return (
     <RequireSignIn>
-      <ManageInner id={id} />
+      <ManageInner key={id} id={id} />
     </RequireSignIn>
   );
 }
@@ -27,9 +28,15 @@ function ManageInner({ id }: { id: string }) {
   const [error, setError] = useState<string>();
   const [tab, setTab] = useState<Tab>((query(location.search, "tab") as Tab) ?? "");
   const { me } = useSession();
+  // Every load or save takes a ticket; a response only lands if no newer one has been issued since,
+  // so a slow refresh can't put pre-save values back on screen (and into the Settings form).
+  const ticket = useRef(0);
+  const saved = useCallback((memorial: MemorialAdmin) => { ticket.current++; setM(memorial); }, []);
   const load = useCallback(async () => {
+    const mine = ++ticket.current;
     try {
       const r = await api.get<{ memorial: MemorialAdmin; pendingTransfer: { toUid: string } | null; ownerInactiveDays: number; recovery: { requestedBy: string; at: number } | null }>(`/memorials/${id}`);
+      if (mine !== ticket.current) return;
       setM(r.memorial);
       setPendingTransfer(r.pendingTransfer);
       setSuccession({ ownerInactiveDays: r.ownerInactiveDays, recovery: r.recovery });
@@ -107,7 +114,7 @@ function ManageInner({ id }: { id: string }) {
         {current === "share" && <Share m={m} />}
         {current === "dayof" && <DayOf m={m} onChange={load} />}
         {current === "plan" && <Plan m={m} onChange={load} />}
-        {current === "settings" && <Settings m={m} onChange={load} />}
+        {current === "settings" && <Settings m={m} onSaved={saved} onChange={load} />}
       </main>
     </>
   );
@@ -457,22 +464,34 @@ function Plan({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
   );
 }
 
-function Settings({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
-  const [f, setF] = useState({
-    name: m.name, born: m.born ?? "", died: m.died ?? "", intro: m.intro ?? "", story: m.story ?? "",
-    privacy: m.privacy, moderation: m.moderation,
-    date: m.service?.date ?? "", time: m.service?.time ?? "", place: m.service?.place ?? "", livestreamUrl: m.service?.livestreamUrl ?? "",
-  });
+function Settings({ m, onSaved, onChange }: { m: MemorialAdmin; onSaved: (m: MemorialAdmin) => void; onChange: () => void }) {
+  const [base, setBase] = useState(() => settingsForm(m));
+  const [f, setF] = useState(base);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string>();
   const [auditLog, setAudit] = useState<{ actorEmail: string; action: string; at: number; detail?: string }[]>();
-  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => { setF({ ...f, [k]: e.target.value }); setSaved(false); };
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => { const v = e.target.value; setF((cur) => ({ ...cur, [k]: v })); setSaved(false); };
   return (
     <section className="stack">
       <form className="card stack" onSubmit={async (e) => {
         e.preventDefault();
-        await api.patch(`/memorials/${m.id}`, { ...f, service: { date: f.date, time: f.time, place: f.place, livestreamUrl: f.livestreamUrl } });
-        setSaved(true);
-        onChange();
+        const body = settingsPatch(base, f);
+        if (!body) { setSaved(true); return; }
+        setSaving(true);
+        setSaveError(undefined);
+        try {
+          const r = await api.patch<{ memorial: MemorialAdmin }>(`/memorials/${m.id}`, body);
+          const fresh = settingsForm(r.memorial);
+          setBase(fresh);
+          setF(fresh);
+          setSaved(true);
+          onSaved(r.memorial);
+        } catch (err) {
+          setSaveError(err instanceof ApiError ? err.message : "Couldn't save. Please check your connection and try again.");
+        } finally {
+          setSaving(false);
+        }
       }}>
         <h3>About {m.name}</h3>
         <label>Name<input value={f.name} onChange={set("name")} required /></label>
@@ -505,7 +524,8 @@ function Settings({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
             <option value="trusted_only">Only trusted family post without review</option>
           </select>
         </label>
-        <div className="row gap"><button className="btn">Save</button>{saved && <span className="muted small">Saved</span>}</div>
+        {saveError && <p className="error">{saveError}</p>}
+        <div className="row gap"><button className="btn" disabled={saving}>{saving ? "Saving…" : "Save"}</button>{saved && <span className="muted small">Saved</span>}</div>
       </form>
       <div className="card stack">
         <h3>Download everything</h3>
