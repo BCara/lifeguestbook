@@ -9,6 +9,7 @@ import { Link, navigate, query } from "../router";
 import { useSession } from "../session";
 import { LifeStory } from "./LifeStory";
 import { WritingHelp } from "./WritingHelp";
+import { settingsChanges, settingsForm } from "../settings";
 
 type Tab = "review" | "story" | "memories" | "writing" | "people" | "share" | "dayof" | "plan" | "settings";
 
@@ -458,21 +459,34 @@ function Plan({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
 }
 
 function Settings({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
-  const [f, setF] = useState({
-    name: m.name, born: m.born ?? "", died: m.died ?? "", intro: m.intro ?? "", story: m.story ?? "",
-    privacy: m.privacy, moderation: m.moderation,
-    date: m.service?.date ?? "", time: m.service?.time ?? "", place: m.service?.place ?? "", livestreamUrl: m.service?.livestreamUrl ?? "",
-  });
+  const [base, setBase] = useState(() => settingsForm(m));
+  const [f, setF] = useState(base);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string>();
   const [auditLog, setAudit] = useState<{ actorEmail: string; action: string; at: number; detail?: string }[]>();
-  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => { setF({ ...f, [k]: e.target.value }); setSaved(false); };
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => { setF({ ...f, [k]: e.target.value }); setSaved(false); setSaveError(undefined); };
   return (
     <section className="stack">
       <form className="card stack" onSubmit={async (e) => {
         e.preventDefault();
-        await api.patch(`/memorials/${m.id}`, { ...f, service: { date: f.date, time: f.time, place: f.place, livestreamUrl: f.livestreamUrl } });
-        setSaved(true);
-        onChange();
+        const body = settingsChanges(base, f);
+        setSaving(true);
+        setSaveError(undefined);
+        try {
+          if (Object.keys(body).length) {
+            const r = await api.patch<{ memorial: MemorialAdmin }>(`/memorials/${m.id}`, body);
+            const fresh = settingsForm(r.memorial);
+            setBase(fresh);
+            setF(fresh);
+            onChange();
+          }
+          setSaved(true);
+        } catch (err) {
+          setSaveError(err instanceof ApiError ? err.message : "Couldn't save. Please check your connection and try again.");
+        } finally {
+          setSaving(false);
+        }
       }}>
         <h3>About {m.name}</h3>
         <label>Name<input value={f.name} onChange={set("name")} required /></label>
@@ -505,7 +519,8 @@ function Settings({ m, onChange }: { m: MemorialAdmin; onChange: () => void }) {
             <option value="trusted_only">Only trusted family post without review</option>
           </select>
         </label>
-        <div className="row gap"><button className="btn">Save</button>{saved && <span className="muted small">Saved</span>}</div>
+        <div className="row gap"><button className="btn" disabled={saving}>{saving ? "Saving…" : "Save"}</button>{saved && <span className="muted small">Saved</span>}</div>
+        {saveError && <p className="error" role="alert">{saveError}</p>}
       </form>
       <div className="card stack">
         <h3>Download everything</h3>
