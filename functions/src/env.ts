@@ -20,7 +20,8 @@ export const paymentsEnabled = (env: Env) => {
   const staging = process.env.GCLOUD_PROJECT === "lifeguestbook-cbert"
     && env.APP_ORIGIN === "https://lifeguestbook-cbert.web.app";
   const mode = (isEmulator && demo) || staging ? "test" : "live";
-  return new RegExp(`^sk_${mode}_[A-Za-z0-9]+$`).test(env.STRIPE_SECRET_KEY)
+  // Standard (sk_) or restricted (rk_) secret key for the matching mode.
+  return new RegExp(`^(sk|rk)_${mode}_[A-Za-z0-9]+$`).test(env.STRIPE_SECRET_KEY)
     && /^whsec_[A-Za-z0-9]+$/.test(env.STRIPE_WEBHOOK_SECRET);
 };
 /** Never turn a missing provider configuration into a production purchase. */

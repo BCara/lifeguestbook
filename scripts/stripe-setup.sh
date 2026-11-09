@@ -33,9 +33,11 @@ if [[ "$MODE" == "live" ]]; then
   fi
 fi
 
-read -rsp "Paste the LifeGuestbook Stripe secret key (sk_${MODE}_...): " STRIPE_KEY; echo
-if [[ ! "$STRIPE_KEY" =~ ^sk_${MODE}_[A-Za-z0-9]+$ ]]; then
-  echo "That is not an sk_${MODE}_ key. Use the standard secret key from Developers > API keys (not a restricted rk_ key)."
+read -rsp "Paste the LifeGuestbook Stripe secret key (rk_${MODE}_... or sk_${MODE}_...): " STRIPE_KEY; echo
+STRIPE_KEY="${STRIPE_KEY//[$'\r\n ']/}"
+# A restricted key (rk_) is preferred: Checkout Sessions, Subscriptions and Webhook Endpoints set to Write.
+if [[ ! "$STRIPE_KEY" =~ ^(sk|rk)_${MODE}_[A-Za-z0-9]+$ ]]; then
+  echo "That is not an rk_${MODE}_ or sk_${MODE}_ key. Create one under Developers > API keys > Create secret key."
   exit 1
 fi
 export STRIPE_KEY WEBHOOK_URL
@@ -46,10 +48,16 @@ stripe_api() { node --input-type=module -e "$1"; }
 ACCOUNT_LINE=$(stripe_api '
   const r = await fetch("https://api.stripe.com/v1/account", { headers: { Authorization: `Bearer ${process.env.STRIPE_KEY}` } });
   const a = await r.json();
-  if (!r.ok) { console.log("ERROR " + (a.error?.message ?? r.status)); process.exit(0); }
-  const name = a.settings?.dashboard?.display_name || a.business_profile?.name || "(no name set)";
-  console.log(`${name} | ${a.id} | ${a.country ?? "?"} | charges_enabled=${a.charges_enabled}`);
+  if (!r.ok) {
+    // A restricted key cannot read /v1/account, but the permission error names the account.
+    const acct = r.status === 403 ? (a.error?.message ?? "").match(/acct_[A-Za-z0-9]+/)?.[0] : undefined;
+    console.log(acct ? `(restricted key) | ${acct} | charges_enabled=unknown` : "ERROR " + (a.error?.message ?? r.status));
+  } else {
+    const name = a.settings?.dashboard?.display_name || a.business_profile?.name || "(no name set)";
+    console.log(`${name} | ${a.id} | ${a.country ?? "?"} | charges_enabled=${a.charges_enabled}`);
+  }
 ')
+# (No process.exit() in these snippets: on Windows, Node 24 crashes if it exits while a fetch connection is closing.)
 if [[ "$ACCOUNT_LINE" == ERROR* ]]; then echo "Stripe rejected the key: ${ACCOUNT_LINE#ERROR }"; exit 1; fi
 echo "Stripe account: $ACCOUNT_LINE"
 if [[ "$MODE" == "live" && "$ACCOUNT_LINE" == *"charges_enabled=false"* ]]; then
@@ -71,9 +79,8 @@ WEBHOOK_SECRET=$(stripe_api '
     "customer.subscription.updated", "customer.subscription.deleted"]) body.append("enabled_events[]", ev);
   const r = await fetch("https://api.stripe.com/v1/webhook_endpoints", { method: "POST", headers: auth, body });
   const e = await r.json();
-  if (!r.ok || !e.secret) { console.error("Could not create the webhook: " + (e.error?.message ?? r.status)); process.exit(1); }
-  console.error(`Created webhook ${e.id} -> ${e.url}`);
-  process.stdout.write(e.secret);
+  if (!r.ok || !e.secret) { console.error("Could not create the webhook: " + (e.error?.message ?? r.status)); process.exitCode = 1; }
+  else { console.error(`Created webhook ${e.id} -> ${e.url}`); process.stdout.write(e.secret); }
 ')
 
 echo "Saving secrets to Firebase ($PROJECT)..."
