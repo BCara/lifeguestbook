@@ -41,7 +41,6 @@ export function Privacy() {
     <PublicLayout>
       <main className="public-info prose">
         <h1>Privacy</h1>
-        <p className="notice small">Draft for legal review before launch.</p>
         <h3>What we keep</h3>
         <p>For admins: your email address, name if given, and which pages you look after. For guests: the name, words and files you share, an optional email if you want to know when it's on the page, and a one-way hash of your IP address used only to stop abuse. We strip location data (GPS) from photos when they're uploaded.</p>
         <h3>Why</h3>
@@ -64,7 +63,6 @@ export function Terms() {
     <PublicLayout>
       <main className="public-info prose">
         <h1>Terms</h1>
-        <p className="notice small">Draft for legal review before launch.</p>
         <h3>The page belongs to the family</h3>
         <p>Whoever creates a page and the admins they invite decide what's on it and who can see it. People who share memories keep the copyright in what they share and let the page's admins and us show it on that page, include it in downloads and printed books, and use it in the slideshow.</p>
         <h3>Be kind</h3>
