@@ -111,6 +111,7 @@ export const paymentRoutes = new Hono<AppEnv>()
         },
       }],
       customer_email: c.get("user")!.email,
+      allow_promotion_codes: true,
       metadata: { memorialId: b.memorialId, product, uid },
       ...(recurring ? { subscription_data: { metadata: { memorialId: b.memorialId, product, uid } } } : {}),
       success_url: `${c.env.APP_ORIGIN}/dashboard/${b.memorialId}?paid={CHECKOUT_SESSION_ID}`,
@@ -129,7 +130,7 @@ export const paymentRoutes = new Hono<AppEnv>()
     if (!meta?.memorialId || meta.uid !== c.get("uid") || !PRODUCTS.includes(meta.product as Product)) {
       return c.json({ error: "Payment session not found." }, 404);
     }
-    if (s.payment_status !== "paid") return c.json({ error: "Payment has not completed yet." }, 409);
+    if (!settled(s)) return c.json({ error: "Payment has not completed yet." }, 409);
     await fulfilCheckout(c.env, stripe, s);
     return c.json({ ok: true });
   })
@@ -140,9 +141,12 @@ export const paymentRoutes = new Hono<AppEnv>()
     return c.json({ ok: true });
   });
 
+/** Paid, or nothing to pay because a 100% off promotion code was used ("no_payment_required"). */
+const settled = (s: Stripe.Checkout.Session) => s.payment_status === "paid" || s.payment_status === "no_payment_required";
+
 async function fulfilCheckout(env: Env, stripe: Stripe, s: Stripe.Checkout.Session) {
   const meta = s.metadata;
-  if (s.payment_status !== "paid" || !meta?.memorialId || !meta.uid || !PRODUCTS.includes(meta.product as Product)) return;
+  if (!settled(s) || !meta?.memorialId || !meta.uid || !PRODUCTS.includes(meta.product as Product)) return;
   const subscriptionId = typeof s.subscription === "string" ? s.subscription : s.subscription?.id;
   if (meta.product === "forever") await stopRecurringBilling(env, meta.memorialId, true);
   await applyPurchase(env, meta.memorialId, meta.product as Product, meta.uid, s.id, amount(s.amount_total, s.currency), {
