@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /signin
+Disallow: /new
+Disallow: /invite
+Disallow: /wall
+Disallow: /m/
+Disallow: /api/
+
+Sitemap: https://lifeguestbook.com/sitemap.xml

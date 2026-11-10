@@ -11,6 +11,7 @@ import { runDailyJobs } from "./jobs";
 import { runDigests } from "./notify";
 import { deliverGuestbookEmails } from "./guestbook-email";
 import { paymentRoutes, stripeWebhook } from "./payments";
+import { portfolioSummaryResponse, runOwnerReport } from "./portfolio";
 import { guestRoutes, mediaRoutes } from "./routes/guest";
 import { hostRoutes, inviteRoutes } from "./routes/host";
 import { legacyRoutes } from "./routes/legacy";
@@ -24,10 +25,13 @@ const APP_ORIGIN = defineString("APP_ORIGIN", { default: "https://lifeguestbook.
 const EMAIL_FROM = defineString("EMAIL_FROM", { default: "Life Guestbook <hello@lifeguestbook.com>" });
 const EMAIL_REPLY_TO = defineString("EMAIL_REPLY_TO", { default: "hello@lifeguestbook.com" });
 const SCREENING_ENABLED = defineBoolean("SCREENING_ENABLED", { default: false });
+const ADMIN_EMAIL = defineString("ADMIN_EMAIL", { default: "" });
+const REPORT_EXCLUDE_EMAILS = defineString("REPORT_EXCLUDE_EMAILS", { default: "" });
 const RESEND_API_KEY = defineSecret("RESEND_API_KEY");
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
+const PORTFOLIO_REPORT_KEY = defineSecret("PORTFOLIO_REPORT_KEY");
 const SECRETS = [RESEND_API_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, ANTHROPIC_API_KEY];
 
 const secret = (s: ReturnType<typeof defineSecret>) => {
@@ -48,6 +52,9 @@ function envFor(): Env {
     STRIPE_WEBHOOK_SECRET: secret(STRIPE_WEBHOOK_SECRET),
     SCREENING_ENABLED: SCREENING_ENABLED.value(),
     ANTHROPIC_API_KEY: secret(ANTHROPIC_API_KEY),
+    PORTFOLIO_REPORT_KEY: secret(PORTFOLIO_REPORT_KEY),
+    ADMIN_EMAIL: ADMIN_EMAIL.value(),
+    REPORT_EXCLUDE_EMAILS: REPORT_EXCLUDE_EMAILS.value(),
   };
 }
 
@@ -59,6 +66,8 @@ app.onError((err, c) => {
 });
 
 app.post("/stripe/webhook", (c) => stripeWebhook(c.env, c.req.raw));
+// The owner's portfolio feed (NAS SUMMARY-CONTRACT.md): bearer key, sets its own no-store/noindex headers.
+app.get("/admin/portfolio-summary", (c) => portfolioSummaryResponse(c.env, c.req.raw));
 app.use("*", async (c, next) => {
   c.header("Cache-Control", "private, no-store");
   await next();
@@ -107,7 +116,7 @@ app.post("/dev/run-jobs", async (c) => {
 });
 
 export const api = onRequest(
-  { region: "us-central1", secrets: SECRETS, memory: "1GiB", timeoutSeconds: 300, concurrency: 40 },
+  { region: "us-central1", secrets: [...SECRETS, PORTFOLIO_REPORT_KEY], memory: "1GiB", timeoutSeconds: 300, concurrency: 40 },
   getRequestListener((req) => app.fetch(req, envFor())),
 );
 
@@ -130,5 +139,13 @@ export const dailyJobs = onSchedule(
   { schedule: "every day 08:10", timeZone: "Europe/London", region: "us-central1", secrets: SECRETS, timeoutSeconds: 540 },
   async () => {
     await runDailyJobs(envFor());
+  },
+);
+
+/** The owner's daily numbers for yesterday (Sydney), emailed to ADMIN_EMAIL once a day. */
+export const ownerDailyReport = onSchedule(
+  { schedule: "every day 00:30", timeZone: "Australia/Sydney", region: "us-central1", secrets: SECRETS, timeoutSeconds: 300, retryCount: 2 },
+  async () => {
+    console.info("owner report", JSON.stringify(await runOwnerReport(envFor())));
   },
 );

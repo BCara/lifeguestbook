@@ -13,6 +13,7 @@ const defaults = {
     "STRIPE_SECRET_KEY=none",
     "STRIPE_WEBHOOK_SECRET=none",
     "ANTHROPIC_API_KEY=none",
+    "PORTFOLIO_REPORT_KEY=none",
     "",
   ].join("\n"),
 };

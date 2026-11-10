@@ -72,6 +72,22 @@ assert.equal(r.data.memorial.role, "owner");
 assert.equal(r.data.memorial.plan.tier, "free");
 step("defaults: link-only, approve-first, free plan");
 
+// Privacy changes persist on the first save, and bad values fail loudly instead of reporting success.
+r = await owner.req("PATCH", `/memorials/${id}`, { privacy: "public" });
+assert.equal(r.status, 200, JSON.stringify(r.data));
+assert.equal(r.data.memorial.privacy, "public");
+assert.equal((await owner.req("GET", `/memorials/${id}`)).data.memorial.privacy, "public", "first privacy change persists");
+r = await owner.req("PATCH", `/memorials/${id}`, { privacy: "everyone" });
+assert.equal(r.status, 400, "unknown privacy value is rejected");
+r = await owner.req("PATCH", `/memorials/${id}`, { intro: "Mum loved her garden and her garden loved her." });
+assert.equal(r.data.memorial.privacy, "public", "saving another field leaves privacy alone");
+r = await owner.req("PATCH", `/memorials/${id}`, { privacy: "private" });
+assert.equal(r.data.memorial.privacy, "private");
+assert.equal((await guest.req("GET", `/m/${slug}`)).status, 404, "private page is hidden from signed-out visitors");
+r = await owner.req("PATCH", `/memorials/${id}`, { privacy: "link" });
+assert.equal(r.data.memorial.privacy, "link");
+step("privacy changes persist and invalid values are rejected");
+
 // The invite email was sent; accept it as the sister.
 r = await owner.req("GET", "/dev/emails");
 const inviteMail = r.data.emails.find((e) => e.to === SISTER);
@@ -288,5 +304,12 @@ step("anniversary email goes to admins a year on");
 const unsub = await fetch(`${BASE}/api/email/unsubscribe?u=x&s=bad`);
 assert.equal(unsub.status, 400, "unsubscribe reachable signed-out (bad signature rejected)");
 step("unsubscribe links work without signing in");
+
+// The owner's portfolio feed stays hidden until PORTFOLIO_REPORT_KEY is set (it's "none" on the emulators).
+const feed = await fetch(`${BASE}/api/admin/portfolio-summary`, { headers: { Authorization: "Bearer none" } });
+assert.equal(feed.status, 404, "portfolio summary answers 404 while its key is unset");
+assert.equal(await feed.text(), "");
+assert.equal(feed.headers.get("cache-control"), "no-store");
+step("portfolio summary is off until its key is configured");
 
 console.log("\nAll smoke checks passed.");

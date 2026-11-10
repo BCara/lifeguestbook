@@ -52,6 +52,11 @@ export interface MemorialDoc {
   stripeCustomerId?: string;
   stripeSubscriptionId?: string | null;
   stripeSubscriptionCancelled?: boolean;
+  /** The payment that last set `plan`, so a refund or dispute of it can take it back. */
+  planPaymentRef?: string | null;
+  unpaidReason?: "refunded" | "disputed";
+  unpaidAt?: number;
+  unpaidStripeEvent?: string;
   legacyContactUid?: string | null;
   aiUses?: number;
   convertedAt?: number;

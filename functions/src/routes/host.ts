@@ -142,9 +142,19 @@ export const hostRoutes = new Hono<AppEnv>()
     for (const [k, max] of [["name", 80], ["born", 20], ["died", 20], ["intro", 600], ["story", 20000]] as const) {
       if (k in b) update[k] = str(b[k], max) ?? null;
     }
-    if (PRIVACY.includes(b.privacy as Privacy)) update.privacy = b.privacy;
-    if (MODERATION.includes(b.moderation as ModerationMode)) update.moderation = b.moderation;
-    if (b.notifyMode === "digest" || b.notifyMode === "instant") update.notifyMode = b.notifyMode;
+    // Reject unknown values instead of ignoring them, so a bad request can't report success without saving.
+    if ("privacy" in b) {
+      if (!PRIVACY.includes(b.privacy as Privacy)) return c.json({ error: "Choose who can see the page." }, 400);
+      update.privacy = b.privacy;
+    }
+    if ("moderation" in b) {
+      if (!MODERATION.includes(b.moderation as ModerationMode)) return c.json({ error: "Choose how memories are reviewed." }, 400);
+      update.moderation = b.moderation;
+    }
+    if ("notifyMode" in b) {
+      if (b.notifyMode !== "digest" && b.notifyMode !== "instant") return c.json({ error: "Choose how you're notified." }, 400);
+      update.notifyMode = b.notifyMode;
+    }
     if (b.mode !== undefined && b.mode !== (await getMemorial(id))?.mode) {
       return c.json({ error: "Use the dedicated memorial conversion flow to change the page type." }, 400);
     }
