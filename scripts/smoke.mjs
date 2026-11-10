@@ -305,4 +305,11 @@ const unsub = await fetch(`${BASE}/api/email/unsubscribe?u=x&s=bad`);
 assert.equal(unsub.status, 400, "unsubscribe reachable signed-out (bad signature rejected)");
 step("unsubscribe links work without signing in");
 
+// The owner's portfolio feed stays hidden until PORTFOLIO_REPORT_KEY is set (it's "none" on the emulators).
+const feed = await fetch(`${BASE}/api/admin/portfolio-summary`, { headers: { Authorization: "Bearer none" } });
+assert.equal(feed.status, 404, "portfolio summary answers 404 while its key is unset");
+assert.equal(await feed.text(), "");
+assert.equal(feed.headers.get("cache-control"), "no-store");
+step("portfolio summary is off until its key is configured");
+
 console.log("\nAll smoke checks passed.");

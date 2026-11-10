@@ -7,6 +7,12 @@ export interface Env {
   STRIPE_WEBHOOK_SECRET: string;
   SCREENING_ENABLED: boolean;
   ANTHROPIC_API_KEY: string;
+  /** Bearer key for GET /api/admin/portfolio-summary. Empty or "none": the route answers 404. */
+  PORTFOLIO_REPORT_KEY?: string;
+  /** Where the owner's daily report goes. Empty: no report is sent. */
+  ADMIN_EMAIL?: string;
+  /** Extra owner or test addresses to leave out of the report, comma-separated. */
+  REPORT_EXCLUDE_EMAILS?: string;
 }
 
 export const isEmulator = process.env.FUNCTIONS_EMULATOR === "true";

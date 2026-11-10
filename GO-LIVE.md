@@ -66,6 +66,27 @@ Run commands in **Git Bash** from `C:\Users\clbbe\Documents\Projects\LifeGuestbo
 - **AI writing help** (optional): set a real `ANTHROPIC_API_KEY` secret, or it keeps using sample text.
 - **Real phones**: on an iPhone and an Android phone, add a memory with a photo, voice note and video.
 
+## 6. Owner daily report and portfolio feed
+
+`GET https://lifeguestbook.com/api/admin/portfolio-summary` serves the NAS morning email (schema 1 of
+`SUMMARY-CONTRACT.md`), and `ownerDailyReport` emails yesterday's numbers to you at 00:30 Sydney time.
+
+1. Create the feed key **before deploying** (the `api` function needs the secret to exist; enter `none` to keep the feed off):
+   ```bash
+   npx firebase functions:secrets:set PORTFOLIO_REPORT_KEY --project lifeguestbook-cbert
+   ```
+   Put the same value in the NAS file `~/.config/projects-hub/summary-keys.json` under `"LifeGuestbook"`.
+2. In `functions/.env` add `ADMIN_EMAIL=<where the report goes>`. Without it no report is sent.
+   Optionally add `REPORT_EXCLUDE_EMAILS=a@x.com,b@y.com` for any other addresses you test with.
+3. Deploy functions and Firestore indexes (the report counts memories with a new `contributions.createdAt` index):
+   ```bash
+   npx firebase deploy --only functions,firestore:indexes --project lifeguestbook-cbert
+   ```
+
+Left out of every number as owner or test: users with `testAccount: true` (set by hand in the Firestore console),
+codebertcreations@gmail.com, `ADMIN_EMAIL`, `REPORT_EXCLUDE_EMAILS`, addresses at example.com/.org/.net or a
+`.test`/`.example`/`.invalid`/`.localhost` domain, addresses with `+test`, and those accounts' pages and payments.
+
 ## Rollback
 
 - Payments off: `npx firebase functions:secrets:set STRIPE_SECRET_KEY --project lifeguestbook-cbert --account codebertcreations@gmail.com`

@@ -37,7 +37,8 @@ export async function stopRecurringBilling(env: Env, memorialId: string, immedia
   await memorials().doc(memorialId).update({ stripeSubscriptionCancelled: true });
 }
 
-type PurchaseBilling = { subscriptionId?: string; customerId?: string; periodEnd?: number; renewal?: boolean };
+/** livemode: Stripe's live/test flag, kept on the payment record so the owner report counts live sales only. */
+type PurchaseBilling = { subscriptionId?: string; customerId?: string; periodEnd?: number; renewal?: boolean; livemode?: boolean };
 export async function applyPurchase(env: Env, memorialId: string, product: Product, payerUid: string, paymentRef: string, amountText: string, billing: PurchaseBilling = {}) {
   if (!PRODUCTS.includes(product)) throw new Error("Unknown payment product");
   const done = db.collection("payments").doc(paymentRef);
@@ -57,7 +58,8 @@ export async function applyPurchase(env: Env, memorialId: string, product: Produ
       ...(billing.subscriptionId ? { stripeSubscriptionId: billing.subscriptionId, stripeSubscriptionCancelled: false } : {}),
       ...(billing.customerId ? { stripeCustomerId: billing.customerId } : {}),
     });
-    tx.set(done, { memorialId, product, payerUid, at: Date.now(), amount: amountText, planBefore: m.plan });
+    tx.set(done, { memorialId, product, payerUid, at: Date.now(), amount: amountText, planBefore: m.plan,
+      ...(typeof billing.livemode === "boolean" ? { livemode: billing.livemode } : {}) });
     tx.set(audit(memorialId).doc(), { actor: payerUid, action: "purchase", detail: product, at: Date.now() });
     if (payer) tx.set(guestbookEmail(memorialId, `receipt-${paymentRef}`), {
       memorialId, dueAt: Date.now(),
@@ -152,7 +154,7 @@ async function fulfilCheckout(env: Env, stripe: Stripe, s: Stripe.Checkout.Sessi
   const subscriptionId = typeof s.subscription === "string" ? s.subscription : s.subscription?.id;
   if (meta.product === "forever") await stopRecurringBilling(env, meta.memorialId, true);
   await applyPurchase(env, meta.memorialId, meta.product as Product, meta.uid, s.id, amount(s.amount_total, s.currency), {
-    subscriptionId, customerId: typeof s.customer === "string" ? s.customer : s.customer?.id,
+    subscriptionId, customerId: typeof s.customer === "string" ? s.customer : s.customer?.id, livemode: s.livemode,
   });
 }
 
@@ -179,7 +181,7 @@ export async function stripeWebhook(env: Env, req: Request): Promise<Response> {
     const subscriptionId = typeof subscription === "string" ? subscription : subscription?.id;
     if (inv.billing_reason === "subscription_cycle" && meta?.memorialId && meta.uid && PRODUCTS.includes(meta.product as Product) && subscriptionId && inv.id) {
       const periodEnd = Math.max(...inv.lines.data.map(line => line.period.end)) * 1000;
-      if (Number.isFinite(periodEnd)) await applyPurchase(env, meta.memorialId, meta.product as Product, meta.uid, inv.id, amount(inv.amount_paid, inv.currency), { subscriptionId, periodEnd, renewal: true });
+      if (Number.isFinite(periodEnd)) await applyPurchase(env, meta.memorialId, meta.product as Product, meta.uid, inv.id, amount(inv.amount_paid, inv.currency), { subscriptionId, periodEnd, renewal: true, livemode: inv.livemode });
     }
   }
   if (event.type === "charge.refunded") {
