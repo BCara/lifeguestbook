@@ -15,6 +15,13 @@ export async function overLimit(key: string, max: number, windowMs = 3600_000): 
   return count > max;
 }
 
+/**
+ * The caller's IP, for per-IP limits. X-Forwarded-For is appended to by every proxy, so its first
+ * entries are whatever the caller sent (Google's front end keeps them and "does not verify" them).
+ * Through the Firebase Hosting rewrite, Hosting appends the caller's address and Google's front end
+ * then appends Hosting's own, so the caller is the entry one before the end.
+ */
 export function clientIp(headers: Headers) {
-  return (headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
+  const hops = (headers.get("x-forwarded-for") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  return hops.length ? hops[Math.max(0, hops.length - 2)] : "unknown";
 }

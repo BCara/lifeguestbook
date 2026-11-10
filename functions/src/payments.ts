@@ -11,6 +11,7 @@ import { receiptEmail } from "./email";
 import { guestbookEmail } from "./guestbook-email";
 import { demoPurchasesEnabled, paymentsEnabled, type Env } from "./env";
 import { roleOf } from "./db";
+import { idOf, isFullRefund, revokeDecision, type PaymentRecord, type RevokeReason } from "./refunds";
 
 const PRODUCTS: Product[] = ["tribute", "forever", "hosting", "living"];
 
@@ -51,11 +52,12 @@ export async function applyPurchase(env: Env, memorialId: string, product: Produ
       ? { ...m.plan, hostingUntil: Math.max(m.plan.hostingUntil ?? 0, billing.periodEnd) }
       : hostingAfterPurchase(m.plan, product);
     if (billing.renewal && (m.stripeSubscriptionId !== billing.subscriptionId || m.plan.tier === "forever" || (product === "living" && m.mode !== "living"))) return false;
-    tx.update(mref, { plan, reminders: {},
+    // planPaymentRef/planBefore let a refund or dispute of this payment take exactly this purchase back.
+    tx.update(mref, { plan, reminders: {}, planPaymentRef: paymentRef,
       ...(billing.subscriptionId ? { stripeSubscriptionId: billing.subscriptionId, stripeSubscriptionCancelled: false } : {}),
       ...(billing.customerId ? { stripeCustomerId: billing.customerId } : {}),
     });
-    tx.set(done, { memorialId, product, payerUid, at: Date.now(), amount: amountText });
+    tx.set(done, { memorialId, product, payerUid, at: Date.now(), amount: amountText, planBefore: m.plan });
     tx.set(audit(memorialId).doc(), { actor: payerUid, action: "purchase", detail: product, at: Date.now() });
     if (payer) tx.set(guestbookEmail(memorialId, `receipt-${paymentRef}`), {
       memorialId, dueAt: Date.now(),
@@ -180,6 +182,13 @@ export async function stripeWebhook(env: Env, req: Request): Promise<Response> {
       if (Number.isFinite(periodEnd)) await applyPurchase(env, meta.memorialId, meta.product as Product, meta.uid, inv.id, amount(inv.amount_paid, inv.currency), { subscriptionId, periodEnd, renewal: true });
     }
   }
+  if (event.type === "charge.refunded") {
+    const charge = event.data.object as Stripe.Charge;
+    if (isFullRefund(charge)) await revokePayment(env, stripe, idOf(charge.payment_intent), "refunded", event.id);
+  }
+  if (event.type === "charge.dispute.created") {
+    await revokePayment(env, stripe, idOf((event.data.object as Stripe.Dispute).payment_intent), "disputed", event.id);
+  }
   if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
     const changed = event.data.object as Stripe.Subscription;
     const sub = await stripe.subscriptions.retrieve(changed.id);
@@ -191,4 +200,62 @@ export async function stripeWebhook(env: Env, req: Request): Promise<Response> {
     });
   }
   return new Response("ok");
+}
+
+/**
+ * Our payment record id (Checkout Session for a first purchase, invoice for a yearly renewal) and page
+ * for a Stripe payment intent, or null when the payment isn't one of ours.
+ */
+async function paymentOf(stripe: Stripe, paymentIntent: string) {
+  const { data: [session] } = await stripe.checkout.sessions.list({ payment_intent: paymentIntent, limit: 1 });
+  if (session?.metadata?.memorialId) return { ref: session.id, memorialId: session.metadata.memorialId };
+  // Subscription payments are made by invoices, not by the Checkout Session directly.
+  const { data: [ip] } = await stripe.invoicePayments.list({ payment: { type: "payment_intent", payment_intent: paymentIntent }, limit: 1 });
+  const invoiceId = idOf(ip?.invoice);
+  if (!invoiceId) return null;
+  const inv = await stripe.invoices.retrieve(invoiceId);
+  const memorialId = inv.parent?.subscription_details?.metadata?.memorialId;
+  const subscriptionId = idOf(inv.parent?.subscription_details?.subscription);
+  if (!memorialId || !subscriptionId) return null;
+  if (inv.billing_reason === "subscription_cycle") return { ref: invoiceId, memorialId };
+  // The first year was recorded under the Checkout Session that started the subscription.
+  const { data: [first] } = await stripe.checkout.sessions.list({ subscription: subscriptionId, limit: 1 });
+  return first ? { ref: first.id, memorialId } : null;
+}
+
+/**
+ * Takes back what one payment bought when it is fully refunded or disputed: the page goes back to the
+ * plan it had just before, the reason is recorded, and a subscription it started stops renewing.
+ * Repeats (Stripe retries, or a refund followed by a dispute) change nothing, and the payment record
+ * is marked so a late webhook or the payer's return link can't apply it again.
+ */
+async function revokePayment(env: Env, stripe: Stripe, paymentIntent: string | null, reason: RevokeReason, stripeEventId: string) {
+  if (!paymentIntent) return;
+  const found = await paymentOf(stripe, paymentIntent);
+  if (!found) {
+    console.warn("refund/dispute for a payment with no purchase of ours", paymentIntent, reason);
+    return;
+  }
+  const { ref, memorialId } = found;
+  const pref = db.collection("payments").doc(ref);
+  const mref = memorials().doc(memorialId);
+  const result = await db.runTransaction(async tx => {
+    const payment = (await tx.get(pref)).data() as PaymentRecord | undefined;
+    const m = (await tx.get(mref)).data() as MemorialDoc | undefined;
+    const decision = revokeDecision(payment, m, ref);
+    const mark = { revoked: reason, revokedAt: Date.now(), revokedStripeEvent: stripeEventId };
+    // Not applied yet: record it as revoked so it never will be.
+    if (decision === "not-applied") tx.set(pref, { memorialId, ...mark });
+    else if (decision !== "already") tx.update(pref, mark);
+    if (decision === "revoke") {
+      tx.update(mref, { plan: payment!.planBefore, planPaymentRef: null, unpaidReason: reason, unpaidAt: Date.now(), unpaidStripeEvent: stripeEventId });
+      tx.set(audit(memorialId).doc(), { actor: "stripe", action: "purchase-revoked", detail: `${payment!.product} ${reason}`, at: Date.now() });
+    }
+    return { decision, product: payment?.product };
+  });
+  if (result.decision === "revoke" && RECURRING[result.product as Product]) {
+    await stopRecurringBilling(env, memorialId, true).catch(e => console.error("could not stop renewal after refund/dispute: cancel it in Stripe", memorialId, e));
+  }
+  if (result.decision === "legacy" || result.decision === "other-payment") console.error("refund/dispute: check this page by hand", memorialId, ref, reason, result.decision);
+  else console.log("refund/dispute", memorialId, ref, reason, result.decision);
 }
